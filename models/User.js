@@ -6,7 +6,7 @@ const UserSchema = new mongoose.Schema({
   password: { type: String, required: true },
   role: {
     type: String,
-    enum: ["student", "teacher", "admin"],
+    enum: ["student", "admin", "super"],
     default: "student",
   }, // Role system
   refreshToken: { type: String }, // Store refresh token

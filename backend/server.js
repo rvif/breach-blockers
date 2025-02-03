@@ -5,7 +5,6 @@ const dotenv = require("dotenv");
 const helmet = require("helmet");
 const path = require("path");
 const cookieParser = require("cookie-parser");
-
 const swaggerUi = require("swagger-ui-express");
 const swaggerSpec = require("./config/swagger");
 
@@ -20,24 +19,65 @@ dotenv.config();
 
 const app = express();
 
+// Trust proxy for secure cookies in production
+if (process.env.NODE_ENV === "production") {
+  app.set("trust proxy", 1);
+}
+
 // Middleware
 app.use(express.json());
-
-// CORS configuration
 app.use(cookieParser());
 
+// CORS configuration with proper production settings
+const corsOptions = {
+  origin:
+    process.env.NODE_ENV === "production"
+      ? [
+          "https://breach-blockers.vercel.app",
+          "https://www.breach-blockers.vercel.app",
+        ]
+      : "http://localhost:5173",
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  exposedHeaders: ["Set-Cookie"],
+};
+
+app.use(cors(corsOptions));
+
+// Set security headers for cookies
+app.use((req, res, next) => {
+  res.set({
+    "Access-Control-Allow-Credentials": "true",
+    "Access-Control-Allow-Origin": req.headers.origin || corsOptions.origin,
+    "Access-Control-Allow-Methods": corsOptions.methods.join(","),
+    "Access-Control-Allow-Headers": corsOptions.allowedHeaders.join(","),
+  });
+  next();
+});
+
+// CSP
 app.use(
-  cors({
-    origin: process.env.FRONTEND_URL || "http://localhost:5173",
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-    exposedHeaders: ["Set-Cookie"],
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        connectSrc: [
+          "'self'",
+          "https://breach-blockers.vercel.app",
+          "wss://breach-blockers.onrender.com",
+        ],
+        imgSrc: ["'self'", "data:", "https:"],
+        scriptSrc: ["'self'", "'unsafe-inline'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        fontSrc: ["'self'", "https:", "data:"],
+        mediaSrc: ["'self'", "https:", "data:"],
+      },
+    },
+    crossOriginEmbedderPolicy: false,
+    crossOriginResourcePolicy: false,
   })
 );
-
-// Enhanced security headers
-app.use(helmet());
 
 // Serve static files
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
@@ -55,7 +95,6 @@ app.use("/api/", (req, res, next) => {
 
 // Apply specific limiters to auth routes
 app.use("/api/auth/login", loginLimiter);
-
 app.use("/api/auth/register", registrationLimiter);
 app.use("/api/auth/forgot-password", emailLimiter);
 app.use("/api/auth/verify-otp", emailLimiter);
@@ -99,15 +138,26 @@ mongoose
     useNewUrlParser: true,
     useUnifiedTopology: true,
   })
-  .then(() => console.log("✅ Connected to MongoDB"))
+  .then(() => {
+    console.log("✅ Connected to MongoDB");
+    if (process.env.NODE_ENV === "production") {
+      console.log("==> Your service is live 🎉");
+    }
+  })
   .catch((err) => console.error("❌ MongoDB Connection Error:", err.message));
 
-// Global error handler
+// Global error handler with better error logging
 app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({
-    msg: "Something went wrong!",
-    error: process.env.NODE_ENV === "development" ? err.message : undefined,
+  console.error("Error details:", {
+    message: err.message,
+    stack: process.env.NODE_ENV === "development" ? err.stack : undefined,
+    path: req.path,
+    method: req.method,
+  });
+
+  res.status(err.status || 500).json({
+    msg: err.message || "Something went wrong!",
+    error: process.env.NODE_ENV === "development" ? err.stack : undefined,
   });
 });
 

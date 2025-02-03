@@ -7,7 +7,7 @@ const path = require("path");
 
 const swaggerUi = require("swagger-ui-express");
 const swaggerSpec = require("./config/swagger");
-const { apiLimiter } = require("./middleware/rateLimiter");
+// const { apiLimiter } = require("./middleware/rateLimiter");
 
 dotenv.config(); // Load environment variables from .env
 
@@ -27,7 +27,7 @@ app.use(
 );
 
 // Apply rate limiting to all routes
-app.use("/api/", apiLimiter);
+// app.use("/api/", apiLimiter);
 
 // Serve API documentation
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));

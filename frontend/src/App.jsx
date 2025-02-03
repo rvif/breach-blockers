@@ -7,15 +7,22 @@ import ProtectedRoute from "./components/auth/ProtectedRoute";
 import PublicRoute from "./components/auth/PublicRoute";
 import Layout from "./components/layout/Layout";
 
-// Lazy load all components
+// Preload public static pages
+const TermsOfService = lazy(() => import("./pages/TermsOfService"));
+const PrivacyPolicy = lazy(() => import("./pages/PrivacyPolicy"));
+const Contact = lazy(() => import("./pages/Contact"));
+
+// Preload these components
+TermsOfService.preload?.();
+PrivacyPolicy.preload?.();
+Contact.preload?.();
+
+// Lazy load other components
 const Home = lazy(() => import("./pages/Home"));
 const Login = lazy(() => import("./pages/Login"));
 const Register = lazy(() => import("./pages/Register"));
 const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
 const ResetPassword = lazy(() => import("./pages/ResetPassword"));
-const TermsOfService = lazy(() => import("./pages/TermsOfService"));
-const PrivacyPolicy = lazy(() => import("./pages/PrivacyPolicy"));
-const Contact = lazy(() => import("./pages/Contact"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Courses = lazy(() => import("./pages/Courses"));
 const Challenges = lazy(() => import("./pages/Challenges"));
@@ -30,6 +37,11 @@ function App() {
           <Layout>
             <Suspense fallback={<LoadingFallback />}>
               <Routes>
+                {/* Public Static Routes - No PublicRoute wrapper needed */}
+                <Route path="/terms" element={<TermsOfService />} />
+                <Route path="/privacy" element={<PrivacyPolicy />} />
+                <Route path="/contact" element={<Contact />} />
+
                 {/* Public Routes */}
                 <Route path="/" element={<Home />} />
                 <Route
@@ -64,9 +76,6 @@ function App() {
                     </PublicRoute>
                   }
                 />
-                <Route path="/terms" element={<TermsOfService />} />
-                <Route path="/privacy" element={<PrivacyPolicy />} />
-                <Route path="/contact" element={<Contact />} />
 
                 {/* Protected Routes */}
                 <Route

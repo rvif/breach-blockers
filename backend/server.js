@@ -45,6 +45,31 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 
+// Cookie settings middleware
+app.use((req, res, next) => {
+  const originalSetCookie = res.cookie;
+  res.cookie = function (name, value, options = {}) {
+    const cookieOptions = {
+      ...options,
+      httpOnly: true,
+      secure: true, // Always true for cross-origin
+      sameSite: "none", // Required for cross-origin
+      path: "/",
+      maxAge:
+        name === "refreshToken" ? 7 * 24 * 60 * 60 * 1000 : options.maxAge,
+    };
+
+    console.log("Setting cookie:", {
+      name,
+      options: cookieOptions,
+      environment: process.env.NODE_ENV,
+    });
+
+    return originalSetCookie.call(this, name, value, cookieOptions);
+  };
+  next();
+});
+
 // Set security headers for cookies
 app.use((req, res, next) => {
   res.set({
@@ -52,6 +77,17 @@ app.use((req, res, next) => {
     "Access-Control-Allow-Origin": req.headers.origin || corsOptions.origin,
     "Access-Control-Allow-Methods": corsOptions.methods.join(","),
     "Access-Control-Allow-Headers": corsOptions.allowedHeaders.join(","),
+  });
+  next();
+});
+
+// Debug middleware for cookies
+app.use((req, res, next) => {
+  console.log("Request cookies:", {
+    cookies: req.cookies,
+    path: req.path,
+    method: req.method,
+    origin: req.headers.origin,
   });
   next();
 });

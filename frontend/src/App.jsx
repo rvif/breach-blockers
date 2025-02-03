@@ -5,9 +5,9 @@ import { Suspense, lazy } from "react";
 import LoadingFallback from "./components/LoadingFallback";
 import ProtectedRoute from "./components/auth/ProtectedRoute";
 import PublicRoute from "./components/auth/PublicRoute";
+import Layout from "./components/layout/Layout";
 
 // Lazy load all components
-const Layout = lazy(() => import("./components/layout/Layout"));
 const Home = lazy(() => import("./pages/Home"));
 const Login = lazy(() => import("./pages/Login"));
 const Register = lazy(() => import("./pages/Register"));
@@ -27,8 +27,8 @@ function App() {
     <BrowserRouter>
       <ThemeProvider>
         <AuthProvider>
-          <Suspense fallback={<LoadingFallback />}>
-            <Layout>
+          <Layout>
+            <Suspense fallback={<LoadingFallback />}>
               <Routes>
                 {/* Public Routes */}
                 <Route path="/" element={<Home />} />
@@ -106,8 +106,8 @@ function App() {
                 <Route path="/404" element={<NotFound />} />
                 <Route path="*" element={<Navigate to="/404" replace />} />
               </Routes>
-            </Layout>
-          </Suspense>
+            </Suspense>
+          </Layout>
         </AuthProvider>
       </ThemeProvider>
     </BrowserRouter>

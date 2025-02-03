@@ -3,14 +3,17 @@ import { Link } from "react-router-dom";
 import { authApi } from "../services/api";
 import Button from "../components/ui/Button";
 import { ArrowLeft } from "lucide-react";
+import RateLimitTimer from "../components/RateLimitTimer";
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState({ type: "", message: "" });
+  const [rateLimitEnd, setRateLimitEnd] = useState(null);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setStatus({ type: "info", message: "Processing..." });
+    setRateLimitEnd(null);
 
     try {
       await authApi.forgotPassword(email);
@@ -19,10 +22,19 @@ export default function ForgotPassword() {
         message: "Reset link sent! Please check your email.",
       });
     } catch (error) {
-      setStatus({
-        type: "error",
-        message: error.response?.data?.message || "Failed to send reset link",
-      });
+      if (error.response?.status === 429) {
+        setRateLimitEnd(Date.now() + error.rateLimitInfo.retryAfter);
+        setStatus({
+          type: "error",
+          message: error.rateLimitInfo.message,
+          attemptsRemaining: error.rateLimitInfo.attemptsRemaining,
+        });
+      } else {
+        setStatus({
+          type: "error",
+          message: error.response?.data?.msg || "Failed to send reset link",
+        });
+      }
     }
   };
 
@@ -49,7 +61,18 @@ export default function ForgotPassword() {
                 : "bg-blue-50 dark:bg-blue-500/10 text-blue-500 border border-blue-500"
             }`}
           >
-            {status.message}
+            <div>{status.message}</div>
+            {rateLimitEnd && (
+              <RateLimitTimer
+                initialTime={rateLimitEnd - Date.now()}
+                onComplete={() => setRateLimitEnd(null)}
+              />
+            )}
+            {status.attemptsRemaining !== undefined && (
+              <div className="mt-1 text-sm">
+                {status.attemptsRemaining} attempts remaining
+              </div>
+            )}
           </div>
         )}
 

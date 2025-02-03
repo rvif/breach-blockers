@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import Button from "../components/ui/Button";
 import { Eye, EyeOff } from "lucide-react";
+import RateLimitTimer from "../components/RateLimitTimer";
 
 export default function Register() {
   const [step, setStep] = useState("register"); // 'register' or 'verify'
@@ -17,6 +18,7 @@ export default function Register() {
   const [passwordErrors, setPasswordErrors] = useState([]);
   const [nameError, setNameError] = useState("");
   const [countdown, setCountdown] = useState(null);
+  const [rateLimitEnd, setRateLimitEnd] = useState(null);
 
   const { register, verifyOtp } = useAuth();
   const navigate = useNavigate();
@@ -86,6 +88,7 @@ export default function Register() {
   const handleRegister = async (e) => {
     e.preventDefault();
     setStatus({ type: "info", message: "Processing..." });
+    setRateLimitEnd(null);
 
     try {
       const nameError = validateName(formData.name.trim());
@@ -102,9 +105,7 @@ export default function Register() {
         return;
       }
 
-      // Clean the name before sending
       const cleanedName = formData.name.trim().split(/\s+/).join(" ");
-
       const response = await register({
         ...formData,
         name: cleanedName,
@@ -117,10 +118,19 @@ export default function Register() {
       });
       setStep("verify");
     } catch (error) {
-      setStatus({
-        type: "error",
-        message: error.response?.data?.msg || "Registration failed",
-      });
+      if (error.response?.status === 429) {
+        setRateLimitEnd(Date.now() + error.rateLimitInfo.retryAfter);
+        setStatus({
+          type: "error",
+          message: error.rateLimitInfo.message,
+          attemptsRemaining: error.rateLimitInfo.attemptsRemaining,
+        });
+      } else {
+        setStatus({
+          type: "error",
+          message: error.response?.data?.msg || "Registration failed",
+        });
+      }
     }
   };
 
@@ -136,10 +146,19 @@ export default function Register() {
       });
       setCountdown(3);
     } catch (error) {
-      setStatus({
-        type: "error",
-        message: error.response?.data?.msg || "Verification failed",
-      });
+      if (error.response?.status === 429) {
+        setStatus({
+          type: "error",
+          message: error.rateLimitInfo.message,
+          retryAfter: error.rateLimitInfo.retryAfter,
+          attemptsRemaining: error.rateLimitInfo.attemptsRemaining,
+        });
+      } else {
+        setStatus({
+          type: "error",
+          message: error.response?.data?.msg || "Verification failed",
+        });
+      }
     }
   };
 
@@ -169,10 +188,16 @@ export default function Register() {
                   : "bg-blue-50 dark:bg-blue-500/10 text-blue-500 border border-blue-500"
               }`}
             >
-              {status.message}
-              {countdown !== null && (
-                <div className="mt-2">
-                  Redirecting in {countdown} seconds...
+              <div>{status.message}</div>
+              {rateLimitEnd && (
+                <RateLimitTimer
+                  initialTime={rateLimitEnd - Date.now()}
+                  onComplete={() => setRateLimitEnd(null)}
+                />
+              )}
+              {status.attemptsRemaining !== undefined && (
+                <div className="mt-1 text-sm">
+                  {status.attemptsRemaining} attempts remaining
                 </div>
               )}
             </div>
@@ -234,7 +259,18 @@ export default function Register() {
                 : "bg-blue-50 dark:bg-blue-500/10 text-blue-500 border border-blue-500"
             }`}
           >
-            {status.message}
+            <div>{status.message}</div>
+            {rateLimitEnd && (
+              <RateLimitTimer
+                initialTime={rateLimitEnd - Date.now()}
+                onComplete={() => setRateLimitEnd(null)}
+              />
+            )}
+            {status.attemptsRemaining !== undefined && (
+              <div className="mt-1 text-sm">
+                {status.attemptsRemaining} attempts remaining
+              </div>
+            )}
           </div>
         )}
 

@@ -1,10 +1,10 @@
-import { useState } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
 import Button from "../components/ui/Button";
 import { User, Lock, Bell, Shield, Eye, EyeOff, Pencil } from "lucide-react";
 import { authApi } from "../services/api";
-import { Link } from "react-router-dom";
 import { userApi } from "../services/api";
+import Alert from "../components/ui/Alert";
 
 export default function Settings() {
   const { user, updateUser } = useAuth();
@@ -12,7 +12,7 @@ export default function Settings() {
   const [profileForm, setProfileForm] = useState({
     name: user?.name || "",
     email: user?.email || "",
-    bio: user?.bio || "Learning to help you be cybersecure <3",
+    bio: user?.bio || "",
   });
 
   const [passwordForm, setPasswordForm] = useState({
@@ -26,7 +26,11 @@ export default function Settings() {
     new: false,
     confirm: false,
   });
-  const [status, setStatus] = useState({ type: "", message: "" });
+  const [submitStatus, setSubmitStatus] = useState({
+    type: "",
+    message: "",
+    timestamp: null,
+  });
   const [passwordErrors, setPasswordErrors] = useState([]);
   const [confirmPasswordError, setConfirmPasswordError] = useState("");
 
@@ -35,14 +39,61 @@ export default function Settings() {
     bio: false,
   });
 
+  const [originalValues, setOriginalValues] = useState({
+    name: user?.name || "",
+    bio: user?.bio || "",
+  });
+
+  const alertKey = useMemo(() => {
+    return submitStatus.message
+      ? `${submitStatus.type}-${submitStatus.message}`
+      : null;
+  }, [submitStatus.type, submitStatus.message]);
+
+  const hasChanges = useMemo(() => {
+    return (
+      profileForm.name.trim() !== originalValues.name.trim() ||
+      profileForm.bio.trim() !== originalValues.bio.trim()
+    );
+  }, [profileForm, originalValues]);
+
+  useEffect(() => {
+    if (user) {
+      setOriginalValues({
+        name: user.name || "",
+        bio: user.bio || "",
+      });
+      setProfileForm({
+        name: user.name || "",
+        email: user.email || "",
+        bio: user.bio || "",
+      });
+    }
+  }, [user]);
+
+  const [apiResponse, setApiResponse] = useState(null);
+
+  const handleAlertClose = useCallback(() => {
+    setApiResponse(null);
+  }, []);
+
+  const alertProps = useMemo(() => {
+    if (!apiResponse) return null;
+
+    return {
+      type: apiResponse.type,
+      message: apiResponse.message,
+      onClose: handleAlertClose,
+      duration: 4000,
+    };
+  }, [apiResponse, handleAlertClose]);
+
   const validateName = (name) => {
-    // Only allow letters and spaces
     const nameRegex = /^[A-Za-z\s]+$/;
     if (!nameRegex.test(name)) {
       return "Name can only contain letters and spaces";
     }
 
-    // Check for consistent capitalization
     const words = name.split(/\s+/);
     const isAllLowerCase = words.every((word) => word === word.toLowerCase());
     const isCapitalized = words.every(
@@ -60,61 +111,50 @@ export default function Settings() {
   const handleProfileSubmit = async (e) => {
     e.preventDefault();
     try {
-      const username = localStorage.getItem("username");
-      if (!username) {
-        console.error("No username in localStorage");
-        throw new Error("No username found. Please log in again.");
-      }
+      const currentName = user?.name;
 
-      // Clean and validate the new name
-      const cleanedName = profileForm.name.trim().split(/\s+/).join(" ");
-
-      // Validate name format
-      const nameError = validateName(cleanedName);
-      if (nameError) {
-        setStatus({
-          type: "error",
-          message: nameError,
-        });
+      if (!currentName) {
         return;
       }
 
-      console.log("Submitting profile update for username:", username);
+      const cleanedName = profileForm.name.trim().split(/\s+/).join(" ");
+
+      const nameError = validateName(cleanedName);
+      if (nameError) {
+        return;
+      }
 
       const response = await userApi.updateProfile(
         {
           name: cleanedName,
           bio: profileForm.bio,
         },
-        username
+        currentName
       );
 
-      // Update the local user state with the response data
+      setApiResponse({
+        type: "success",
+        message: response.msg || "Profile updated successfully!",
+        timestamp: Date.now(),
+      });
+
+      const newUsername = cleanedName.toLowerCase().replace(/\s+/g, ".");
+
       updateUser({
         ...user,
         name: cleanedName,
         bio: profileForm.bio,
-        username: cleanedName.toLowerCase().replace(/\s+/g, "."),
-        ...response,
+        username: newUsername,
+        ...response.user,
       });
 
-      // Update localStorage with URL-friendly username
-      localStorage.setItem(
-        "username",
-        cleanedName.toLowerCase().replace(/\s+/g, ".")
-      );
-
-      setStatus({
-        type: "success",
-        message: "Profile updated successfully!",
-      });
-
+      localStorage.setItem("username", newUsername);
       setIsEditing({ name: false, bio: false });
     } catch (error) {
-      console.error("Profile update error:", error);
-      setStatus({
+      setApiResponse({
         type: "error",
         message: error.response?.data?.msg || "Failed to update profile",
+        timestamp: Date.now(),
       });
     }
   };
@@ -139,7 +179,6 @@ export default function Settings() {
     setPasswordForm((prev) => ({ ...prev, newPassword }));
     setPasswordErrors(validatePassword(newPassword));
 
-    // Check confirm password match
     if (passwordForm.confirmPassword) {
       if (passwordForm.confirmPassword !== newPassword) {
         setConfirmPasswordError("Passwords do not match");
@@ -166,19 +205,25 @@ export default function Settings() {
 
   const handlePasswordSubmit = async (e) => {
     e.preventDefault();
-    setStatus({ type: "", message: "" });
+    setSubmitStatus({ type: "", message: "", timestamp: Date.now() });
 
-    // Validate passwords match
     if (passwordForm.newPassword !== passwordForm.confirmPassword) {
-      setStatus({ type: "error", message: "New passwords do not match" });
+      setSubmitStatus({
+        type: "error",
+        message: "New passwords do not match",
+        timestamp: Date.now(),
+      });
       return;
     }
 
-    // Validate password requirements
     const errors = validatePassword(passwordForm.newPassword);
     if (errors.length > 0) {
       setPasswordErrors(errors);
-      setStatus({ type: "error", message: "Please fix password errors" });
+      setSubmitStatus({
+        type: "error",
+        message: "Please fix password errors",
+        timestamp: Date.now(),
+      });
       return;
     }
 
@@ -188,10 +233,10 @@ export default function Settings() {
         newPassword: passwordForm.newPassword,
       });
 
-      // Show success message and clear form
-      setStatus({
+      setSubmitStatus({
         type: "success",
         message: "Password updated successfully!",
+        timestamp: Date.now(),
       });
 
       setPasswordForm({
@@ -200,15 +245,14 @@ export default function Settings() {
         confirmPassword: "",
       });
     } catch (error) {
-      // Handle specific error messages from backend
       const errorMessage =
         error.response?.data?.msg || "Failed to update password";
-      setStatus({
+      setSubmitStatus({
         type: "error",
         message: errorMessage,
+        timestamp: Date.now(),
       });
 
-      // Only clear new password fields on error, keep current password
       if (errorMessage === "Current password is incorrect") {
         setPasswordForm((prev) => ({
           ...prev,
@@ -224,6 +268,24 @@ export default function Settings() {
       ...prev,
       [field]: !prev[field],
     }));
+  };
+
+  const handleEditToggle = (field) => {
+    setIsEditing((prev) => ({ ...prev, [field]: !prev[field] }));
+  };
+
+  const handleInputChange = (field, value) => {
+    setProfileForm((prev) => ({
+      ...prev,
+      [field]: value,
+    }));
+  };
+
+  const MAX_BIO_LENGTH = 150;
+
+  const handleBioChange = (e) => {
+    const value = e.target.value.slice(0, MAX_BIO_LENGTH);
+    setProfileForm((prev) => ({ ...prev, bio: value }));
   };
 
   const tabs = [
@@ -242,7 +304,6 @@ export default function Settings() {
         Settings
       </h1>
 
-      {/* Tabs */}
       <div className="flex space-x-4 border-b border-gray-200 dark:border-gray-800">
         {tabs.map((tab) => (
           <button
@@ -260,123 +321,133 @@ export default function Settings() {
         ))}
       </div>
 
-      {/* Profile Settings */}
+      {apiResponse && (
+        <Alert key={`alert-${apiResponse.timestamp}`} {...alertProps} />
+      )}
+
       {activeTab === "profile" && (
         <form onSubmit={handleProfileSubmit} className="space-y-6">
-          {status.message && (
-            <div
-              className={`p-4 rounded ${
-                status.type === "error"
-                  ? "bg-red-50 dark:bg-red-500/10 text-red-500 border border-red-500"
-                  : "bg-green-50 dark:bg-green-500/10 text-green-500 border border-green-500"
-              }`}
-            >
-              {status.message}
-            </div>
-          )}
-
-          <div>
+          <div className="relative">
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Name
+              Full Name
             </label>
             <div className="relative">
-              <input
-                type="text"
-                className={`${inputClassName} ${
-                  !isEditing.name && "bg-gray-100 dark:bg-gray-800"
-                }`}
-                value={profileForm.name}
-                onChange={(e) =>
-                  setProfileForm((prev) => ({
-                    ...prev,
-                    name: e.target.value,
-                  }))
-                }
-                disabled={!isEditing.name}
-              />
+              {isEditing.name ? (
+                <input
+                  type="text"
+                  className="w-full px-3 py-2 bg-gray-50 dark:bg-cyber-black border border-gray-300 
+                    dark:border-cyber-green rounded focus:ring-1 focus:ring-cyber-green/50"
+                  value={profileForm.name}
+                  onChange={(e) => handleInputChange("name", e.target.value)}
+                />
+              ) : (
+                <div
+                  className="w-full px-3 py-2 bg-gray-50 dark:bg-cyber-black border border-gray-300 
+                  dark:border-cyber-green rounded"
+                >
+                  {profileForm.name}
+                </div>
+              )}
               <button
                 type="button"
-                onClick={() =>
-                  setIsEditing((prev) => ({ ...prev, name: !prev.name }))
-                }
+                onClick={() => handleEditToggle("name")}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 
                   dark:text-gray-400 dark:hover:text-gray-200"
               >
                 <Pencil className="h-4 w-4" />
               </button>
             </div>
-            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-              Name must be either all lowercase (e.g., john doe) or properly
-              capitalized (e.g., John Doe)
-            </p>
           </div>
 
-          <div>
+          <div className="relative">
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               Email
             </label>
-            <input
-              type="email"
-              className={`${inputClassName} bg-gray-100 dark:bg-gray-800`}
-              value={profileForm.email}
-              disabled
-            />
+            <div className="relative">
+              <div
+                className="w-full px-3 py-2 bg-gray-50 dark:bg-cyber-black border border-gray-300 
+                dark:border-cyber-green rounded flex items-center justify-between"
+              >
+                <span className="text-gray-500">{profileForm.email}</span>
+                <Lock className="h-4 w-4 text-gray-400" />
+              </div>
+            </div>
           </div>
 
-          <div>
+          <div className="relative">
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               Bio
             </label>
             <div className="relative">
-              <textarea
-                className={`${inputClassName} ${
-                  !isEditing.bio && "bg-gray-100 dark:bg-gray-800"
-                } h-[200px] resize-none scrollbar-none`}
-                rows="4"
-                value={profileForm.bio}
-                onChange={(e) => {
-                  const bio = e.target.value;
-                  if (bio.length <= 100) {
-                    setProfileForm((prev) => ({ ...prev, bio }));
-                  }
-                }}
-                disabled={!isEditing.bio}
-              />
+              {isEditing.bio ? (
+                <textarea
+                  id="bio"
+                  name="bio"
+                  value={profileForm.bio}
+                  onChange={handleBioChange}
+                  rows={4}
+                  maxLength={MAX_BIO_LENGTH}
+                  className="w-full resize-none px-3 py-2 bg-gray-50 dark:bg-cyber-black border 
+                    border-gray-300 dark:border-cyber-green rounded focus:ring-1 
+                    focus:ring-cyber-green/50 pr-10"
+                  placeholder="Tell us about yourself..."
+                />
+              ) : (
+                <div
+                  className="w-full px-3 py-2 bg-gray-50 dark:bg-cyber-black border 
+                  border-gray-300 dark:border-cyber-green rounded min-h-[96px] pr-10"
+                >
+                  {profileForm.bio}
+                </div>
+              )}
               <button
                 type="button"
-                onClick={() =>
-                  setIsEditing((prev) => ({ ...prev, bio: !prev.bio }))
-                }
+                onClick={() => handleEditToggle("bio")}
                 className="absolute right-3 top-3 text-gray-500 hover:text-gray-700 
                   dark:text-gray-400 dark:hover:text-gray-200"
               >
                 <Pencil className="h-4 w-4" />
               </button>
-              <div className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                {profileForm.bio.length}/100 characters
-              </div>
+              {isEditing.bio && (
+                <span className="absolute bottom-2 right-2 text-xs text-gray-500 dark:text-gray-400">
+                  {profileForm.bio.length}/{MAX_BIO_LENGTH}
+                </span>
+              )}
             </div>
           </div>
 
-          <Button type="submit" disabled={!isEditing.name && !isEditing.bio}>
-            Save Changes
-          </Button>
+          {hasChanges && (
+            <div className="flex justify-end space-x-3">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => {
+                  setProfileForm({
+                    ...originalValues,
+                    email: user?.email || "",
+                  });
+                  setIsEditing({ name: false, bio: false });
+                }}
+              >
+                Cancel
+              </Button>
+              <Button type="submit">Save Changes</Button>
+            </div>
+          )}
         </form>
       )}
 
-      {/* Security Settings */}
       {activeTab === "security" && (
         <form onSubmit={handlePasswordSubmit} className="space-y-6">
-          {status.message && (
-            <div
-              className={`p-4 rounded ${
-                status.type === "error"
-                  ? "bg-red-50 dark:bg-red-500/10 text-red-500 border border-red-500"
-                  : "bg-green-50 dark:bg-green-500/10 text-green-500 border border-green-500"
-              }`}
-            >
-              {status.message}
-            </div>
+          {submitStatus.message && (
+            <Alert
+              type={submitStatus.type}
+              message={submitStatus.message}
+              onClose={() =>
+                setSubmitStatus({ type: "", message: "", timestamp: null })
+              }
+              duration={4000}
+            />
           )}
 
           <div>
@@ -490,7 +561,6 @@ export default function Settings() {
         </form>
       )}
 
-      {/* Notifications Settings */}
       {activeTab === "notifications" && (
         <div className="space-y-6">
           <p className="text-gray-600 dark:text-gray-400">
@@ -499,7 +569,6 @@ export default function Settings() {
         </div>
       )}
 
-      {/* Privacy Settings */}
       {activeTab === "privacy" && (
         <div className="space-y-6">
           <p className="text-gray-600 dark:text-gray-400">

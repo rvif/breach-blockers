@@ -17,6 +17,20 @@ export default {
           accent: "#059669",
         },
       },
+      animation: {
+        "loading-bar": "loading 2s linear infinite",
+        blink: "blink 1s step-end infinite",
+      },
+      keyframes: {
+        loading: {
+          "0%": { transform: "translateX(-100%)" },
+          "100%": { transform: "translateX(300%)" },
+        },
+        blink: {
+          "0%, 100%": { opacity: "1" },
+          "50%": { opacity: "0" },
+        },
+      },
     },
   },
   plugins: [

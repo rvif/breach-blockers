@@ -18,51 +18,22 @@ export function AuthProvider({ children }) {
   };
 
   const checkAuth = async () => {
-    console.log("Starting checkAuth...");
     try {
-      const token = localStorage.getItem("accessToken");
-      console.log("Token exists:", !!token);
-
-      if (token) {
-        try {
-          console.log("Attempting to refresh token...");
-          const response = await authApi.refreshToken();
-          if (response.accessToken) {
-            console.log("Token refresh successful");
-            if (response.user?.name) {
-              const urlFriendlyUsername = response.user.name
-                .toLowerCase()
-                .replace(/\s+/g, ".");
-              console.log("Storing username:", urlFriendlyUsername);
-              localStorage.setItem("username", urlFriendlyUsername);
-            }
-            setUser({
-              ...response.user,
-              token: response.accessToken,
-            });
-          }
-        } catch (error) {
-          console.error("Auth check failed completely:", error);
-          if (
-            error.response?.status === 401 ||
-            error.response?.status === 403
-          ) {
-            localStorage.removeItem("accessToken");
-            localStorage.removeItem("rememberedEmail");
-            localStorage.removeItem("username");
-          }
-        }
+      const response = await authApi.refreshToken();
+      if (response.user) {
+        setUser(response.user);
       } else {
-        console.log("No token, clearing storage");
-        localStorage.removeItem("accessToken");
-        localStorage.removeItem("rememberedEmail");
-        localStorage.removeItem("username");
+        setUser(null);
       }
     } catch (error) {
-      console.error("Auth check failed:", error);
-      localStorage.removeItem("accessToken");
-      localStorage.removeItem("rememberedEmail");
-      localStorage.removeItem("username");
+      // Silently handle expected auth errors
+      if (error.response?.status === 401 || error.response?.status === 403) {
+        setUser(null);
+      } else {
+        // Only log unexpected errors
+        console.error("Unexpected error during auth check:", error);
+        setUser(null);
+      }
     } finally {
       setLoading(false);
     }
@@ -95,19 +66,15 @@ export function AuthProvider({ children }) {
     try {
       setError(null);
       const response = await authApi.login(credentials);
-      console.log("Login response:", response);
 
-      if (response.user?.username) {
-        console.log("Storing username:", response.user.username);
+      if (response.user) {
+        // Store username in localStorage right after successful login
         localStorage.setItem("username", response.user.username);
+        setUser(response.user);
       } else {
-        console.error("No username in login response");
+        console.error("No user data in login response");
       }
 
-      setUser({
-        ...response.user,
-        token: response.accessToken,
-      });
       return response;
     } catch (error) {
       console.error("Login error:", error);

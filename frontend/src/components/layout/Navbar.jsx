@@ -15,6 +15,14 @@ export default function Navbar({ onMenuClick }) {
     }
   };
 
+  const getUserProfilePath = () => {
+    if (!user) return "/";
+    // Use the username or name, ensuring it's URL-safe
+    const urlSafeName =
+      user.username || user.name.toLowerCase().replace(/\s+/g, "-");
+    return `/${urlSafeName}`;
+  };
+
   return (
     <nav className="bg-white dark:bg-cyber-black border-b border-gray-200 dark:border-cyber-green sticky top-0 z-40">
       <div className="container mx-auto px-4">
@@ -50,10 +58,13 @@ export default function Navbar({ onMenuClick }) {
               {user ? (
                 <div className="flex items-center">
                   <Link
-                    to={`/${user.name}`}
+                    to={getUserProfilePath()}
                     className="px-4 py-2 text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-cyber-green transition-colors"
                   >
-                    {user.name}
+                    <div className="flex items-center">
+                      <User className="h-4 w-4 mr-2" />
+                      <span>{user.username || user.name}</span>
+                    </div>
                   </Link>
                   <div className="h-4 w-px bg-gray-300 dark:bg-cyber-green mx-2" />
                   <button

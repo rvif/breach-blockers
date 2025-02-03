@@ -171,21 +171,6 @@
 //   "isEmailVerified": false
 // }
 
-const express = require("express");
-const bcrypt = require("bcryptjs");
-const jwt = require("jsonwebtoken");
-const User = require("../models/User");
-const TempUser = require("../models/TempUser");
-const { auth } = require("../middleware/auth");
-const {
-  sendVerificationEmail,
-  sendPasswordResetEmail,
-  generateOTP,
-} = require("../utils/emailService");
-const router = express.Router();
-const cookieParser = require("cookie-parser");
-const { validatePassword } = require("../utils/validation");
-
 /**
  * @swagger
  * /api/auth/register:
@@ -378,8 +363,37 @@ const { validatePassword } = require("../utils/validation");
  *       401:
  *         description: Not authenticated
  */
+const express = require("express");
+const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
+const User = require("../models/User");
+const TempUser = require("../models/TempUser");
+const { auth } = require("../middleware/auth");
+const {
+  sendVerificationEmail,
+  sendPasswordResetEmail,
+  generateOTP,
+} = require("../utils/emailService");
+const router = express.Router();
+const cookieParser = require("cookie-parser");
+const { validatePassword } = require("../utils/validation");
+const {
+  loginLimiter,
+  registrationLimiter,
+  emailLimiter,
+  handleSuccess,
+} = require("../middleware/rateLimiter");
 
 router.use(cookieParser());
+
+// Cookie configuration
+const cookieOptions = {
+  httpOnly: true,
+  secure: false, // Set to false for development
+  sameSite: "lax",
+  path: "/",
+  maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+};
 
 // Helper function to generate JWT tokens
 const generateTokens = (user) => {
@@ -397,64 +411,69 @@ const generateTokens = (user) => {
 };
 
 // Registration endpoint
-router.post("/register", async (req, res) => {
-  try {
-    const { name, email, password } = req.body;
+router.post(
+  "/register",
+  registrationLimiter,
+  handleSuccess,
+  async (req, res) => {
+    try {
+      const { name, email, password } = req.body;
 
-    // Validate email format
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      return res.status(400).json({ msg: "Invalid email format" });
+      // Validate email format
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        return res.status(400).json({ msg: "Invalid email format" });
+      }
+
+      // Validate password strength
+      const { isValid, errors } = validatePassword(password);
+      if (!isValid) {
+        return res
+          .status(400)
+          .json({ msg: "Password requirements not met", errors });
+      }
+
+      // Check existing user in both User and TempUser collections
+      const existingUser = await User.findOne({ email });
+      const existingTempUser = await TempUser.findOne({ email });
+
+      if (existingUser) {
+        return res.status(400).json({ msg: "User already exists" });
+      }
+
+      if (existingTempUser) {
+        await existingTempUser.deleteOne(); // Remove existing temporary registration
+      }
+
+      const hashedPassword = await bcrypt.hash(password, 10);
+      const otp = generateOTP();
+      const otpExpires = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
+
+      const tempUser = new TempUser({
+        name,
+        email,
+        password: hashedPassword,
+        role: "student",
+        otp,
+        otpExpires,
+      });
+
+      await tempUser.save();
+      await sendVerificationEmail(tempUser);
+
+      res.status(201).json({
+        msg: "Registration initiated! Please check your email for OTP verification.",
+        email: tempUser.email,
+      });
+    } catch (error) {
+      console.error("Error in user registration:", error);
+      res.status(500).json({ msg: "Registration failed. Please try again." });
     }
-
-    // Validate password strength
-    const { isValid, errors } = validatePassword(password);
-    if (!isValid) {
-      return res
-        .status(400)
-        .json({ msg: "Password requirements not met", errors });
-    }
-
-    // Check existing user in both User and TempUser collections
-    const existingUser = await User.findOne({ email });
-    const existingTempUser = await TempUser.findOne({ email });
-
-    if (existingUser) {
-      return res.status(400).json({ msg: "User already exists" });
-    }
-
-    if (existingTempUser) {
-      await existingTempUser.deleteOne(); // Remove existing temporary registration
-    }
-
-    const hashedPassword = await bcrypt.hash(password, 10);
-    const otp = generateOTP();
-    const otpExpires = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
-
-    const tempUser = new TempUser({
-      name,
-      email,
-      password: hashedPassword,
-      role: "student",
-      otp,
-      otpExpires,
-    });
-
-    await tempUser.save();
-    await sendVerificationEmail(tempUser);
-
-    res.status(201).json({
-      msg: "Registration initiated! Please check your email for OTP verification.",
-      email: tempUser.email,
-    });
-  } catch (error) {
-    console.error("Error in user registration:", error);
-    res.status(500).json({ msg: "Registration failed. Please try again." });
   }
-});
+);
 
 // Verify OTP
-router.post("/verify-otp", async (req, res) => {
+router.post("/verify-otp", emailLimiter, handleSuccess, async (req, res) => {
   try {
     const { email, otp } = req.body;
 
@@ -492,11 +511,7 @@ router.post("/verify-otp", async (req, res) => {
     newUser.refreshToken = refreshToken;
     await newUser.save();
 
-    res.cookie("refreshToken", refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "Strict",
-    });
+    res.cookie("refreshToken", refreshToken, cookieOptions);
 
     res.json({
       msg: "Email verified successfully. You are now logged in.",
@@ -516,9 +531,9 @@ router.post("/verify-otp", async (req, res) => {
 });
 
 // Login
-router.post("/login", async (req, res) => {
+router.post("/login", loginLimiter, handleSuccess, async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, rememberMe } = req.body;
     const user = await User.findOne({ email });
     if (!user) {
       return res.status(400).json({ msg: "Invalid credentials" });
@@ -538,21 +553,28 @@ router.post("/login", async (req, res) => {
 
     const { accessToken, refreshToken } = generateTokens(user);
 
+    // Save refresh token to user
     user.refreshToken = refreshToken;
     await user.save();
 
-    res.cookie("refreshToken", refreshToken, {
+    // Set cookie expiry based on rememberMe
+    const cookieOptions = {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
-      sameSite: "Strict",
-    });
+      sameSite: "lax",
+      path: "/",
+      maxAge: rememberMe
+        ? 30 * 24 * 60 * 60 * 1000 // 30 days if remember me
+        : 24 * 60 * 60 * 1000, // 1 day if not
+    };
+
+    res.cookie("refreshToken", refreshToken, cookieOptions);
 
     res.json({
       accessToken,
       user: {
         id: user._id,
         name: user.name,
-        username: user.name.toLowerCase().replace(/\s+/g, "."), // Generate username from name
         email: user.email,
         role: user.role,
         isEmailVerified: user.isEmailVerified,
@@ -565,104 +587,121 @@ router.post("/login", async (req, res) => {
 });
 
 // Request Password Reset
-router.post("/forgot-password", async (req, res) => {
-  try {
-    const { email } = req.body;
-    const user = await User.findOne({ email });
+router.post(
+  "/forgot-password",
+  emailLimiter,
+  handleSuccess,
+  async (req, res) => {
+    try {
+      const { email } = req.body;
+      const user = await User.findOne({ email });
 
-    if (!user) {
-      return res.status(404).json({ msg: "User not found" });
+      if (!user) {
+        return res.status(404).json({ msg: "User not found" });
+      }
+
+      if (
+        user.passwordResetLockUntil &&
+        user.passwordResetLockUntil > Date.now()
+      ) {
+        return res.status(429).json({
+          msg: "Too many reset attempts. Please try again later.",
+          lockUntil: user.passwordResetLockUntil,
+        });
+      }
+
+      await sendPasswordResetEmail(user);
+
+      user.passwordResetAttempts += 1;
+      if (user.passwordResetAttempts >= 3) {
+        user.passwordResetLockUntil = new Date(
+          Date.now() + 24 * 60 * 60 * 1000
+        );
+      }
+      await user.save();
+
+      res.json({ msg: "Password reset email sent" });
+    } catch (error) {
+      console.error("Error in password reset request:", error);
+      res.status(500).json({ msg: "Server Error" });
     }
-
-    if (
-      user.passwordResetLockUntil &&
-      user.passwordResetLockUntil > Date.now()
-    ) {
-      return res.status(429).json({
-        msg: "RATE_LIMITED: Too many reset attempts. Please try again later.",
-        lockUntil: user.passwordResetLockUntil,
-      });
-    }
-
-    await sendPasswordResetEmail(user);
-
-    user.passwordResetAttempts += 1;
-    if (user.passwordResetAttempts >= 3) {
-      user.passwordResetLockUntil = new Date(Date.now() + 24 * 60 * 60 * 1000);
-    }
-    await user.save();
-
-    res.json({ msg: "Password reset email sent" });
-  } catch (error) {
-    console.error("Error in password reset request:", error);
-    res.status(500).json({ msg: "Server Error" });
   }
-});
+);
 
 // Reset Password
-router.post("/reset-password", async (req, res) => {
-  try {
-    const { token, newPassword } = req.body;
-    const decoded = jwt.verify(token, process.env.PASSWORD_RESET_SECRET);
+router.post(
+  "/reset-password",
+  emailLimiter,
+  handleSuccess,
+  async (req, res) => {
+    try {
+      const { token, newPassword } = req.body;
+      const decoded = jwt.verify(token, process.env.PASSWORD_RESET_SECRET);
 
-    const user = await User.findById(decoded.id);
-    if (!user) {
-      return res.status(404).json({ msg: "User not found" });
+      const user = await User.findById(decoded.id);
+      if (!user) {
+        return res.status(404).json({ msg: "User not found" });
+      }
+
+      const hashedPassword = await bcrypt.hash(newPassword, 10);
+      user.password = hashedPassword;
+      user.passwordResetAttempts = 0;
+      user.passwordResetLockUntil = null;
+      await user.save();
+
+      res.json({ msg: "Password reset successfully" });
+    } catch (error) {
+      res.status(400).json({ msg: "Invalid or expired reset token" });
     }
-
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
-    user.password = hashedPassword;
-    user.passwordResetAttempts = 0;
-    user.passwordResetLockUntil = null;
-    await user.save();
-
-    res.json({ msg: "Password reset successfully" });
-  } catch (error) {
-    res.status(400).json({ msg: "Invalid or expired reset token" });
   }
-});
+);
 
 // Refresh Token
 router.post("/refresh-token", async (req, res) => {
   try {
     const refreshToken = req.cookies.refreshToken;
+    console.log("Received refresh token:", refreshToken);
+
     if (!refreshToken) {
       return res.status(401).json({ msg: "No refresh token found" });
     }
 
-    const user = await User.findOne({ refreshToken });
-    if (!user) {
+    // Verify the refresh token
+    const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
+    console.log("Decoded refresh token:", decoded);
+
+    // Find user and verify refresh token matches
+    const user = await User.findById(decoded.id);
+    if (!user || user.refreshToken !== refreshToken) {
       return res.status(403).json({ msg: "Invalid refresh token" });
     }
 
-    jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET, (err, decoded) => {
-      if (err) return res.status(403).json({ msg: "Invalid refresh token" });
+    // Generate new tokens
+    const { accessToken, refreshToken: newRefreshToken } = generateTokens(user);
 
-      const { accessToken, refreshToken: newRefreshToken } =
-        generateTokens(user);
-      user.refreshToken = newRefreshToken;
-      user.save();
+    // Update user's refresh token
+    user.refreshToken = newRefreshToken;
+    await user.save();
 
-      res.cookie("refreshToken", newRefreshToken, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "Strict",
-      });
+    // Set the new refresh token cookie
+    res.cookie("refreshToken", newRefreshToken, cookieOptions);
 
-      // Add user data to response
-      res.json({
-        accessToken,
-        user: {
-          id: user._id,
-          email: user.email,
-          name: user.name,
-          username: user.username,
-          bio: user.bio,
-        },
-      });
+    // Send response
+    res.json({
+      accessToken,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        isEmailVerified: user.isEmailVerified,
+      },
     });
   } catch (error) {
     console.error("Refresh token error:", error);
+    if (error.name === "JsonWebTokenError") {
+      return res.status(403).json({ msg: "Invalid refresh token" });
+    }
     res.status(500).json({ msg: "Server Error" });
   }
 });
@@ -678,7 +717,11 @@ router.post("/logout", auth, async (req, res) => {
     user.refreshToken = "";
     await user.save();
 
-    res.clearCookie("refreshToken");
+    res.clearCookie("refreshToken", {
+      ...cookieOptions,
+      maxAge: 0,
+    });
+
     res.json({ msg: "Logged out successfully!" });
   } catch (error) {
     console.error("Logout error:", error);
@@ -699,6 +742,14 @@ router.post("/update-password", auth, async (req, res) => {
     if (!isMatch) {
       return res.status(400).json({ msg: "Current password is incorrect" });
     }
+
+    const { isValid, errors } = validatePassword(newPassword);
+    if (!isValid) {
+      return res
+        .status(400)
+        .json({ msg: "Password requirements not met", errors });
+    }
+
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(newPassword, salt);
     user.password = hashedPassword;
@@ -707,8 +758,25 @@ router.post("/update-password", auth, async (req, res) => {
     res.json({ msg: "Password updated successfully" });
   } catch (error) {
     console.error("Update password error:", error);
-
     res.status(400).json({ msg: "Failed to update password" });
   }
 });
+
+// Route for checking email role
+router.post("/check-email-role", async (req, res) => {
+  try {
+    const { email } = req.body;
+    const user = await User.findOne({ email });
+
+    if (user) {
+      res.json({ role: user.role });
+    } else {
+      res.json({ role: null });
+    }
+  } catch (error) {
+    console.error("Error checking email role:", error);
+    res.status(500).json({ msg: "Server error" });
+  }
+});
+
 module.exports = router;

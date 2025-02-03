@@ -3,46 +3,94 @@ import axios from "axios";
 const BASE_URL =
   `${import.meta.env.VITE_API_URL}/api` || "http://localhost:3000/api";
 
+// Create memory storage for access token
+let inMemoryToken = null;
+
 const api = axios.create({
   baseURL: BASE_URL,
   headers: {
     "Content-Type": "application/json",
   },
-  withCredentials: true, // Important for handling cookies
+  withCredentials: true, // For handling cookies
 });
 
-// Add auth header to all requests if token exists
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem("accessToken");
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
+// Add request interceptor to include Authorization header
+api.interceptors.request.use(
+  (config) => {
+    if (inMemoryToken) {
+      config.headers.Authorization = `Bearer ${inMemoryToken}`;
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
   }
-  config.withCredentials = true; // Important for cookies
-  return config;
-});
+);
 
 // Update response interceptor
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
+    // Handle rate limit errors (429)
+    if (error.response?.status === 429) {
+      const retryAfter = error.response.data.remainingTime;
+      const message = error.response.data.msg;
+
+      // Add rate limit info to error
+      error.rateLimitInfo = {
+        message,
+        retryAfter,
+        attemptsRemaining: error.response.data.attemptsRemaining,
+      };
+    }
+
     const originalRequest = error.config;
 
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    if (
+      (error.response?.status === 401 || error.response?.status === 403) &&
+      !originalRequest._retry &&
+      !originalRequest.url.includes("/auth/refresh-token")
+    ) {
       originalRequest._retry = true;
 
       try {
         const response = await authApi.refreshToken();
-        return api(originalRequest);
+        if (response.accessToken) {
+          inMemoryToken = response.accessToken;
+          api.defaults.headers.common[
+            "Authorization"
+          ] = `Bearer ${response.accessToken}`;
+          originalRequest.headers.Authorization = `Bearer ${response.accessToken}`;
+          return api(originalRequest);
+        }
       } catch (refreshError) {
-        window.location.href = "/login";
-        return Promise.reject(refreshError);
+        inMemoryToken = null;
+        delete api.defaults.headers.common["Authorization"];
+
+        // Only redirect if not already on login page
+        if (window.location.pathname !== "/login") {
+          window.location.href = "/login";
+        }
       }
     }
     return Promise.reject(error);
   }
 );
 
+// Utility function to check for refresh token cookie
+const hasRefreshTokenCookie = () => {
+  return document.cookie
+    .split(";")
+    .some((cookie) => cookie.trim().startsWith("refreshToken="));
+};
+
 export const authApi = {
+  clearUserData: () => {
+    inMemoryToken = null;
+    localStorage.removeItem("rememberedEmail");
+    localStorage.removeItem("username");
+  },
+
   register: async (userData) => {
     const response = await api.post("/auth/register", userData);
     return response.data;
@@ -50,28 +98,44 @@ export const authApi = {
 
   verifyOtp: async (email, otp) => {
     const response = await api.post("/auth/verify-otp", { email, otp });
-    if (response.data.accessToken) {
-      localStorage.setItem("accessToken", response.data.accessToken);
+    if (response.data.user?.username) {
+      localStorage.setItem("username", response.data.user.username);
     }
     return response.data;
   },
 
   login: async (credentials) => {
-    console.log("Login attempt with rememberMe:", !!credentials.rememberMe);
-    const response = await api.post("/auth/login", credentials);
+    const response = await api.post("/auth/login", {
+      ...credentials,
+      rememberMe: credentials.rememberMe, // Send rememberMe to backend
+    });
+
     if (response.data.accessToken) {
-      console.log("Setting access token...");
-      localStorage.setItem("accessToken", response.data.accessToken);
-      console.log("Setting username:", response.data.user.username);
-      localStorage.setItem("username", response.data.user.username);
+      inMemoryToken = response.data.accessToken;
+      api.defaults.headers.common[
+        "Authorization"
+      ] = `Bearer ${response.data.accessToken}`;
+
+      // Handle remembered email
       if (credentials.rememberMe) {
-        console.log("Setting remembered email...");
         localStorage.setItem("rememberedEmail", credentials.email);
+      } else {
+        localStorage.removeItem("rememberedEmail");
       }
     }
     return response.data;
   },
 
+  logout: async () => {
+    try {
+      await api.post("/auth/logout");
+    } finally {
+      inMemoryToken = null;
+      delete api.defaults.headers.common["Authorization"];
+    }
+  },
+
+  // Other auth methods remain the same but remove localStorage token handling
   forgotPassword: async (email) => {
     const response = await api.post("/auth/forgot-password", { email });
     return response.data;
@@ -90,16 +154,6 @@ export const authApi = {
     return response.data;
   },
 
-  logout: async () => {
-    try {
-      await api.post("/auth/logout");
-    } finally {
-      localStorage.removeItem("accessToken");
-      localStorage.removeItem("rememberedEmail");
-      localStorage.removeItem("username");
-    }
-  },
-
   updatePassword: async ({ currentPassword, newPassword }) => {
     const response = await api.post("/auth/update-password", {
       currentPassword,
@@ -109,54 +163,60 @@ export const authApi = {
   },
 
   refreshToken: async () => {
-    console.log("Attempting token refresh...");
     try {
       const response = await api.post("/auth/refresh-token");
       if (response.data.accessToken) {
-        console.log("New token received, updating storage...");
-        localStorage.setItem("accessToken", response.data.accessToken);
-        if (response.data.user?.username) {
-          console.log("Storing username:", response.data.user.username);
-          localStorage.setItem("username", response.data.user.username);
-        } else {
-          console.error("No username in refresh token response");
-        }
+        inMemoryToken = response.data.accessToken;
+        api.defaults.headers.common[
+          "Authorization"
+        ] = `Bearer ${response.data.accessToken}`;
+        return response.data;
       }
+      throw new Error("No access token in refresh response");
+    } catch (error) {
+      inMemoryToken = null;
+      delete api.defaults.headers.common["Authorization"];
+      throw error;
+    }
+  },
+
+  checkEmailRole: async (email) => {
+    try {
+      const response = await api.post("/auth/check-email-role", { email });
       return response.data;
     } catch (error) {
-      console.error("Token refresh failed:", error);
       throw error;
     }
   },
 };
 
+// Update userApi to not rely on localStorage for tokens
 export const userApi = {
   getProfile: async () => {
     const username = localStorage.getItem("username");
     if (!username) {
       throw new Error("Username not found in storage");
     }
-    // Convert from john.doe to John Doe
+    // Keep original case from localStorage
     const displayName = username
       .split(".")
       .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
       .join(" ");
-    console.log("Getting profile for username:", displayName);
+
     const response = await api.get(
       `/profile/${encodeURIComponent(displayName)}`
     );
     return response.data;
   },
 
-  updateProfile: async (data, originalUsername) => {
-    // Use the original username for the API route
-    const displayName = originalUsername
-      .split(".")
-      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(" ");
-    console.log("Updating profile for username:", displayName);
+  updateProfile: async (data, currentName) => {
+    if (!currentName) {
+      throw new Error("Current name is required for profile update");
+    }
+
+    // Don't modify the case of the current name
     const response = await api.put(
-      `/profile/${encodeURIComponent(displayName)}`,
+      `/profile/${encodeURIComponent(currentName)}`,
       data
     );
     return response.data;

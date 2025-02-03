@@ -4,33 +4,37 @@ const cors = require("cors");
 const dotenv = require("dotenv");
 const helmet = require("helmet");
 const path = require("path");
+const cookieParser = require("cookie-parser");
 
 const swaggerUi = require("swagger-ui-express");
 const swaggerSpec = require("./config/swagger");
-// const { apiLimiter } = require("./middleware/rateLimiter");
 
-dotenv.config(); // Load environment variables from .env
+const {
+  loginLimiter,
+  registrationLimiter,
+  emailLimiter,
+  apiLimiter,
+} = require("./middleware/rateLimiter");
+
+dotenv.config();
 
 const app = express();
 
 // Middleware
-app.use(express.json()); // Parse incoming JSON requests
+app.use(express.json());
 
-// Allow cross-origin requests
+// CORS configuration
+app.use(cookieParser());
+
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL || "http://localhost:5173", // frontend URL
-    credentials: true, // for cookies
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    origin: process.env.FRONTEND_URL || "http://localhost:5173",
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
+    exposedHeaders: ["Set-Cookie"],
   })
 );
-
-// Apply rate limiting to all routes
-// app.use("/api/", apiLimiter);
-
-// Serve API documentation
-app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 // Enhanced security headers
 app.use(helmet());
@@ -38,19 +42,37 @@ app.use(helmet());
 // Serve static files
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
+// Swagger docs
+app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+
+// Apply API rate limit to all routes except auth
+app.use("/api/", (req, res, next) => {
+  if (!req.path.startsWith("/auth/")) {
+    return apiLimiter(req, res, next);
+  }
+  next();
+});
+
+// Apply specific limiters to auth routes
+app.use("/api/auth/login", loginLimiter);
+
+app.use("/api/auth/register", registrationLimiter);
+app.use("/api/auth/forgot-password", emailLimiter);
+app.use("/api/auth/verify-otp", emailLimiter);
+app.use("/api/auth/resend-verification", emailLimiter);
+
 // Routes
 const authRoutes = require("./routes/auth");
-app.use("/api/auth", authRoutes); // Authentication routes
+app.use("/api/auth", authRoutes);
 
-const protectedRoutes = require("./routes/protectedRoutes"); // Import the protected routes
-app.use("/api/protected", protectedRoutes); // Use the protected routes
+const protectedRoutes = require("./routes/protectedRoutes");
+app.use("/api/protected", protectedRoutes);
 
 const userRoutes = require("./routes/userRoutes");
 app.use("/api/users", userRoutes);
 
 const courseRoutes = require("./routes/courseRoutes");
 const certificateRoutes = require("./routes/certificateRoutes");
-
 app.use("/api/courses", courseRoutes);
 app.use("/api/certificates", certificateRoutes);
 
@@ -65,7 +87,6 @@ app.use("/api/enrollments", enrollmentRoutes);
 
 const profileRoutes = require("./routes/profileRoutes");
 const analyticsRoutes = require("./routes/analyticsRoutes");
-
 app.use("/api/profile", profileRoutes);
 app.use("/api/analytics", analyticsRoutes);
 
@@ -78,7 +99,6 @@ mongoose
     useNewUrlParser: true,
     useUnifiedTopology: true,
   })
-
   .then(() => console.log("✅ Connected to MongoDB"))
   .catch((err) => console.error("❌ MongoDB Connection Error:", err.message));
 
@@ -94,9 +114,7 @@ app.use((err, req, res, next) => {
 // Handle unhandled promise rejections
 process.on("unhandledRejection", (err) => {
   console.error("Unhandled Promise Rejection:", err);
-  // process.exit(1);   // In production env exit the process
 });
 
-// Start the server
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));

@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { Eye, EyeOff, ArrowLeft } from "lucide-react";
 import Button from "../components/ui/Button";
 import { authApi } from "../services/api";
+import RateLimitTimer from "../components/RateLimitTimer";
 
 export default function ResetPassword() {
   const [searchParams] = useSearchParams();
@@ -27,6 +28,7 @@ export default function ResetPassword() {
 
   const [passwordErrors, setPasswordErrors] = useState([]);
   const [confirmPasswordError, setConfirmPasswordError] = useState("");
+  const [rateLimitEnd, setRateLimitEnd] = useState(null);
 
   useEffect(() => {
     const verifyToken = async () => {
@@ -103,6 +105,7 @@ export default function ResetPassword() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setRateLimitEnd(null);
 
     if (formData.password !== formData.confirmPassword) {
       setStatus({ type: "error", message: "Passwords do not match" });
@@ -124,10 +127,19 @@ export default function ResetPassword() {
       });
       setTimeout(() => navigate("/login"), 2000);
     } catch (error) {
-      setStatus({
-        type: "error",
-        message: error.response?.data?.message || "Failed to reset password",
-      });
+      if (error.response?.status === 429) {
+        setRateLimitEnd(Date.now() + error.rateLimitInfo.retryAfter);
+        setStatus({
+          type: "error",
+          message: error.rateLimitInfo.message,
+          attemptsRemaining: error.rateLimitInfo.attemptsRemaining,
+        });
+      } else {
+        setStatus({
+          type: "error",
+          message: error.response?.data?.msg || "Failed to reset password",
+        });
+      }
     }
   };
 
@@ -171,7 +183,18 @@ export default function ResetPassword() {
                 : "bg-green-50 dark:bg-green-500/10 text-green-500 border border-green-500"
             }`}
           >
-            {status.message}
+            <div>{status.message}</div>
+            {rateLimitEnd && (
+              <RateLimitTimer
+                initialTime={rateLimitEnd - Date.now()}
+                onComplete={() => setRateLimitEnd(null)}
+              />
+            )}
+            {status.attemptsRemaining !== undefined && (
+              <div className="mt-1 text-sm">
+                {status.attemptsRemaining} attempts remaining
+              </div>
+            )}
           </div>
         )}
 

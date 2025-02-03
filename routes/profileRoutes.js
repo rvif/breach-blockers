@@ -225,28 +225,22 @@ router.get("/:username", auth, async (req, res) => {
 // Update profile
 router.put("/:username", auth, async (req, res) => {
   try {
+    // Changed to look up by name instead of username
     const user = await User.findOne({ name: req.params.username });
 
-    if (!user || user._id.toString() !== req.user.id) {
+    if (!user) {
+      return res.status(404).json({ msg: "User not found" });
+    }
+
+    // Check if the authenticated user is trying to update their own profile
+    if (user._id.toString() !== req.user.id) {
       return res.status(403).json({ msg: "Access denied" });
     }
 
-    const { name, email, bio, preferences } = req.body;
-
-    // Check if email is already taken
-    if (email && email !== user.email) {
-      const existingUser = await User.findOne({ email });
-      if (existingUser) {
-        return res.status(400).json({ msg: "Email already in use" });
-      }
-    }
+    const { name, bio, preferences } = req.body;
 
     const updates = {};
     if (name) updates.name = name;
-    if (email) {
-      updates.email = email;
-      updates.isEmailVerified = false; // Require re-verification
-    }
     if (bio) updates.bio = bio;
     if (preferences) updates.preferences = preferences;
 
@@ -258,6 +252,7 @@ router.put("/:username", auth, async (req, res) => {
 
     res.json({ msg: "Profile updated successfully", user: updatedUser });
   } catch (error) {
+    console.error("Error updating user profile:", error);
     res.status(500).json({ msg: "Error updating profile" });
   }
 });

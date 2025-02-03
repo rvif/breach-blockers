@@ -15,12 +15,16 @@ const app = express();
 
 // Middleware
 app.use(express.json()); // Parse incoming JSON requests
+
+// Allow cross-origin requests
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL || "http://localhost:3000",
-    credentials: true,
+    origin: "http://localhost:5173", // frontend URL
+    credentials: true, // for cookies
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
   })
-); // Allow cross-origin requests
+);
 
 // Apply rate limiting to all routes
 app.use("/api/", apiLimiter);

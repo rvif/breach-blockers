@@ -552,6 +552,7 @@ router.post("/login", async (req, res) => {
       user: {
         id: user._id,
         name: user.name,
+        username: user.name.toLowerCase().replace(/\s+/g, "."), // Generate username from name
         email: user.email,
         role: user.role,
         isEmailVerified: user.isEmailVerified,
@@ -578,7 +579,7 @@ router.post("/forgot-password", async (req, res) => {
       user.passwordResetLockUntil > Date.now()
     ) {
       return res.status(429).json({
-        msg: "Too many reset attempts. Please try again later.",
+        msg: "RATE_LIMITED: Too many reset attempts. Please try again later.",
         lockUntil: user.passwordResetLockUntil,
       });
     }
@@ -648,7 +649,17 @@ router.post("/refresh-token", async (req, res) => {
         sameSite: "Strict",
       });
 
-      res.json({ accessToken });
+      // Add user data to response
+      res.json({
+        accessToken,
+        user: {
+          id: user._id,
+          email: user.email,
+          name: user.name,
+          username: user.username,
+          bio: user.bio,
+        },
+      });
     });
   } catch (error) {
     console.error("Refresh token error:", error);
@@ -675,4 +686,29 @@ router.post("/logout", auth, async (req, res) => {
   }
 });
 
+// Update Password
+router.post("/update-password", auth, async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ msg: "User not found" });
+    }
+
+    const isMatch = await bcrypt.compare(currentPassword, user.password);
+    if (!isMatch) {
+      return res.status(400).json({ msg: "Current password is incorrect" });
+    }
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(newPassword, salt);
+    user.password = hashedPassword;
+    await user.save();
+
+    res.json({ msg: "Password updated successfully" });
+  } catch (error) {
+    console.error("Update password error:", error);
+
+    res.status(400).json({ msg: "Failed to update password" });
+  }
+});
 module.exports = router;

@@ -8,20 +8,25 @@ const UserSchema = new mongoose.Schema({
     type: String,
     enum: ["student", "admin", "super"],
     default: "student",
-  }, // Role system
-  refreshToken: { type: String }, // Store refresh token
+  },
+  bio: {
+    type: String,
+    default: "Learning to help you be cybersecure <3",
+    maxLength: 100,
+  },
+  refreshToken: { type: String },
   isEmailVerified: {
     type: Boolean,
     default: false,
-  }, // Track email verification status
+  },
   passwordResetAttempts: {
     type: Number,
     default: 0,
-  }, // Track password reset attempts
+  },
   passwordResetLockUntil: {
     type: Date,
     default: null,
-  }, // Lockout timestamp for password reset
+  },
   createdAt: {
     type: Date,
     default: Date.now,

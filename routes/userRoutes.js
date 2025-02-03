@@ -220,7 +220,7 @@ router.get("/", auth, roleAuth(["super"]), async (req, res) => {
     const users = await User.find()
       .select("-password -refreshToken")
       .sort({ createdAt: -1 });
-    res.json(users);
+    res.json(users); // Bio will be included in the response
   } catch (error) {
     console.error("Error fetching users:", error);
     res.status(500).json({ msg: "Server Error" });
@@ -248,7 +248,7 @@ router.get("/:username", auth, async (req, res) => {
         .json({ msg: "Access denied, insufficient permissions" });
     }
 
-    res.json(user);
+    res.json(user); // Bio will be included in the response
   } catch (error) {
     console.error("Error fetching user:", error);
     res.status(500).json({ msg: "Server Error" });
@@ -294,7 +294,7 @@ router.patch("/:userId/role", auth, roleAuth(["super"]), async (req, res) => {
 });
 
 // Update user profile (owner or super)
-router.patch("/:userId", auth, async (req, res) => {
+router.put("/:userId", auth, async (req, res) => {
   try {
     const user = await User.findById(req.params.userId);
     if (!user) {
@@ -308,7 +308,7 @@ router.patch("/:userId", auth, async (req, res) => {
         .json({ msg: "Access denied, insufficient permissions" });
     }
 
-    const allowedUpdates = ["name", "email"];
+    const allowedUpdates = ["name", "bio"];
     const updates = Object.keys(req.body)
       .filter((key) => allowedUpdates.includes(key))
       .reduce((obj, key) => {
@@ -316,11 +316,11 @@ router.patch("/:userId", auth, async (req, res) => {
         return obj;
       }, {});
 
-    // If email is being updated, require re-verification
-    if (updates.email && updates.email !== user.email) {
-      updates.isEmailVerified = false;
-      // You might want to trigger email verification here
-      // await sendVerificationEmail(user);
+    // Validate bio length
+    if (updates.bio && updates.bio.length > 100) {
+      return res
+        .status(400)
+        .json({ msg: "Bio must be 100 characters or less" });
     }
 
     Object.assign(user, updates);
@@ -333,6 +333,7 @@ router.patch("/:userId", auth, async (req, res) => {
         name: user.name,
         email: user.email,
         role: user.role,
+        bio: user.bio,
         isEmailVerified: user.isEmailVerified,
       },
     });

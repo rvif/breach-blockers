@@ -1,4 +1,4 @@
-import { Shield, Lock, Code, Trophy } from "lucide-react";
+import { Lock, Code, Trophy } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 

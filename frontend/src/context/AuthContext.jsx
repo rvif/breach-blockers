@@ -22,17 +22,21 @@ export function AuthProvider({ children }) {
       const response = await authApi.refreshToken();
       if (response.user) {
         setUser(response.user);
+        localStorage.setItem("username", response.user.username);
+        localStorage.setItem("user", JSON.stringify(response.user));
       } else {
         setUser(null);
+        authApi.clearUserData();
       }
     } catch (error) {
-      // Silently handle expected auth errors
+      // Handle auth errors
       if (error.response?.status === 401 || error.response?.status === 403) {
         setUser(null);
+        authApi.clearUserData();
       } else {
-        // Only log unexpected errors
         console.error("Unexpected error during auth check:", error);
         setUser(null);
+        authApi.clearUserData();
       }
     } finally {
       setLoading(false);

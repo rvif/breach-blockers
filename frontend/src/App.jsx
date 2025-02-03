@@ -7,6 +7,7 @@ import ProtectedRoute from "./components/auth/ProtectedRoute";
 import PublicRoute from "./components/auth/PublicRoute";
 import Layout from "./components/layout/Layout";
 import { useNavigate } from "react-router-dom";
+import UnprotectedRoute from "./components/auth/UnprotectedRoute";
 
 // Import all components
 const Home = lazy(() => import("./pages/Home"));
@@ -47,41 +48,41 @@ function App() {
           <Layout>
             <Suspense fallback={<LoadingFallback />}>
               <Routes>
-                {/* Public Routes (accessible by all) */}
+                {/* Truly Public Routes (accessible by all, no redirects) */}
                 <Route
                   path="/"
                   element={
-                    <PublicRoute>
+                    <UnprotectedRoute>
                       <Home />
-                    </PublicRoute>
+                    </UnprotectedRoute>
                   }
                 />
                 <Route
                   path="/terms"
                   element={
-                    <PublicRoute>
+                    <UnprotectedRoute>
                       <TermsOfService />
-                    </PublicRoute>
+                    </UnprotectedRoute>
                   }
                 />
                 <Route
                   path="/privacy"
                   element={
-                    <PublicRoute>
+                    <UnprotectedRoute>
                       <PrivacyPolicy />
-                    </PublicRoute>
+                    </UnprotectedRoute>
                   }
                 />
                 <Route
                   path="/contact"
                   element={
-                    <PublicRoute>
+                    <UnprotectedRoute>
                       <Contact />
-                    </PublicRoute>
+                    </UnprotectedRoute>
                   }
                 />
 
-                {/* Auth Routes (only for non-authenticated users) */}
+                {/* Auth Routes (redirects authenticated users) */}
                 <Route
                   path="/login"
                   element={
@@ -115,7 +116,17 @@ function App() {
                   }
                 />
 
-                {/* Protected Routes (only for authenticated users) */}
+                {/* Logout Route */}
+                <Route
+                  path="/logout"
+                  element={
+                    <ProtectedRoute>
+                      <LogoutRoute />
+                    </ProtectedRoute>
+                  }
+                />
+
+                {/* Protected Routes */}
                 <Route
                   path="/:username"
                   element={
@@ -145,16 +156,6 @@ function App() {
                   element={
                     <ProtectedRoute>
                       <Settings />
-                    </ProtectedRoute>
-                  }
-                />
-
-                {/* Add Logout Route before the 404 catch-all */}
-                <Route
-                  path="/logout"
-                  element={
-                    <ProtectedRoute>
-                      <LogoutRoute />
                     </ProtectedRoute>
                   }
                 />

@@ -1,17 +1,14 @@
 import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
-import Loader from "../ui/Loader";
+import LoadingFallback from "../LoadingFallback";
+import { Suspense } from "react";
 
 export default function PublicRoute({ children }) {
   const { user, loading } = useAuth();
   const location = useLocation();
 
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader size="lg" />
-      </div>
-    );
+    return <LoadingFallback />;
   }
 
   if (user) {
@@ -21,5 +18,5 @@ export default function PublicRoute({ children }) {
     return <Navigate to={from} replace />;
   }
 
-  return children;
+  return <Suspense fallback={<LoadingFallback />}>{children}</Suspense>;
 }

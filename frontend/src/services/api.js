@@ -89,6 +89,8 @@ export const authApi = {
     inMemoryToken = null;
     localStorage.removeItem("rememberedEmail");
     localStorage.removeItem("username");
+    // Clear any other auth-related data
+    localStorage.removeItem("user");
   },
 
   register: async (userData) => {
@@ -132,6 +134,8 @@ export const authApi = {
     } finally {
       inMemoryToken = null;
       delete api.defaults.headers.common["Authorization"];
+      // Clear all auth-related data
+      authApi.clearUserData();
     }
   },
 

@@ -94,7 +94,7 @@ export default function Login() {
 
     try {
       const userData = await login({ ...formData, rememberMe });
-      console.log("Login response:", userData);
+      // console.log("Login response:", userData);
       setStatus({ type: "success", message: "Login successful!" });
 
       setTimeout(() => {

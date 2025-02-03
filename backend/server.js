@@ -19,7 +19,7 @@ app.use(express.json()); // Parse incoming JSON requests
 // Allow cross-origin requests
 app.use(
   cors({
-    origin: "http://localhost:5173", // frontend URL
+    origin: process.env.FRONTEND_URL || "http://localhost:5173", // frontend URL
     credentials: true, // for cookies
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],

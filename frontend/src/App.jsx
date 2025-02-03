@@ -8,6 +8,7 @@ import PublicRoute from "./components/auth/PublicRoute";
 import Layout from "./components/layout/Layout";
 import { useNavigate } from "react-router-dom";
 
+// Import all components
 const Home = lazy(() => import("./pages/Home"));
 const Login = lazy(() => import("./pages/Login"));
 const Register = lazy(() => import("./pages/Register"));
@@ -21,21 +22,6 @@ const Courses = lazy(() => import("./pages/Courses"));
 const Challenges = lazy(() => import("./pages/Challenges"));
 const Settings = lazy(() => import("./pages/Settings"));
 const NotFound = lazy(() => import("./pages/NotFound"));
-
-// AuthRoute component to handle authenticated user redirects
-function AuthRoute({ children }) {
-  const { user, loading } = useAuth();
-
-  if (loading) {
-    return <LoadingFallback />;
-  }
-
-  if (user) {
-    return <Navigate to={`/${user.username || user.name}`} replace />;
-  }
-
-  return children;
-}
 
 // LogoutRoute component to handle logout
 function LogoutRoute() {
@@ -99,33 +85,33 @@ function App() {
                 <Route
                   path="/login"
                   element={
-                    <AuthRoute>
+                    <PublicRoute>
                       <Login />
-                    </AuthRoute>
+                    </PublicRoute>
                   }
                 />
                 <Route
                   path="/register"
                   element={
-                    <AuthRoute>
+                    <PublicRoute>
                       <Register />
-                    </AuthRoute>
+                    </PublicRoute>
                   }
                 />
                 <Route
                   path="/forgot-password"
                   element={
-                    <AuthRoute>
+                    <PublicRoute>
                       <ForgotPassword />
-                    </AuthRoute>
+                    </PublicRoute>
                   }
                 />
                 <Route
                   path="/reset-password"
                   element={
-                    <AuthRoute>
+                    <PublicRoute>
                       <ResetPassword />
-                    </AuthRoute>
+                    </PublicRoute>
                   }
                 />
 

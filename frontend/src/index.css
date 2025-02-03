@@ -1,0 +1,24 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+::selection {
+  background-color: #00ff00;
+  color: #000000;
+  opacity: 0.3;
+}
+
+.dark ::selection {
+  background-color: #00ff00;
+  color: #000000;
+  opacity: 0.3;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}

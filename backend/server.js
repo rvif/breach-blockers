@@ -59,11 +59,11 @@ app.use((req, res, next) => {
         name === "refreshToken" ? 7 * 24 * 60 * 60 * 1000 : options.maxAge,
     };
 
-    console.log("Setting cookie:", {
-      name,
-      options: cookieOptions,
-      environment: process.env.NODE_ENV,
-    });
+    // console.log("Setting cookie:", {
+    //   name,
+    //   options: cookieOptions,
+    //   environment: process.env.NODE_ENV,
+    // });
 
     return originalSetCookie.call(this, name, value, cookieOptions);
   };
@@ -83,12 +83,12 @@ app.use((req, res, next) => {
 
 // Debug middleware for cookies
 app.use((req, res, next) => {
-  console.log("Request cookies:", {
-    cookies: req.cookies,
-    path: req.path,
-    method: req.method,
-    origin: req.headers.origin,
-  });
+  // console.log("Request cookies:", {
+  //   cookies: req.cookies,
+  //   path: req.path,
+  //   method: req.method,
+  //   origin: req.headers.origin,
+  // });
   next();
 });
 

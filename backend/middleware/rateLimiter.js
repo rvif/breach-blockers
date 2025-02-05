@@ -24,7 +24,7 @@ const getStoreKey = (req) => {
 const resetAttempts = (req) => {
   const key = getStoreKey(req);
   attemptStore.delete(key);
-  console.log(`Reset attempts for ${key}`);
+  // console.log(`Reset attempts for ${key}`);
 };
 
 // Base config for all limiters

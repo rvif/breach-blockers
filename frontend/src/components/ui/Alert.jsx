@@ -10,30 +10,21 @@ const Alert = memo(function Alert({ type, message, onClose, duration = 4000 }) {
   useEffect(() => {
     if (!message) return;
 
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-    }
-
+    startTimeRef.current = Date.now();
     setProgress(100);
     setIsVisible(true);
-    startTimeRef.current = Date.now();
-    const endTime = startTimeRef.current + duration;
 
     timerRef.current = setInterval(() => {
-      const now = Date.now();
-      const remaining = endTime - now;
+      const elapsed = Date.now() - startTimeRef.current;
+      const remaining = Math.max(0, 100 * (1 - elapsed / duration));
 
-      if (remaining <= 0) {
+      setProgress(remaining);
+
+      if (remaining === 0) {
         clearInterval(timerRef.current);
-        setProgress(0);
-        setTimeout(() => {
-          setIsVisible(false);
-          setTimeout(() => onClose?.(), 300);
-        }, 200);
-      } else {
-        setProgress((remaining / duration) * 100);
+        if (onClose) onClose();
       }
-    }, 16);
+    }, 40);
 
     return () => {
       if (timerRef.current) {

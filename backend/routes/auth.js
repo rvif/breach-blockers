@@ -660,7 +660,7 @@ router.post(
 router.post("/refresh-token", async (req, res) => {
   try {
     const refreshToken = req.cookies.refreshToken;
-    console.log("Received refresh token:", refreshToken);
+    // console.log("Received refresh token:", refreshToken);
 
     if (!refreshToken) {
       return res.status(401).json({ msg: "No refresh token found" });
@@ -668,7 +668,7 @@ router.post("/refresh-token", async (req, res) => {
 
     // Verify the refresh token
     const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
-    console.log("Decoded refresh token:", decoded);
+    // console.log("Decoded refresh token:", decoded);
 
     // Find user and verify refresh token matches
     const user = await User.findById(decoded.id);

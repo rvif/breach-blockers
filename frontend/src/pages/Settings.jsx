@@ -1,7 +1,16 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
 import Button from "../components/ui/Button";
-import { User, Lock, Bell, Shield, Eye, EyeOff, Pencil } from "lucide-react";
+import {
+  User,
+  Lock,
+  Bell,
+  Shield,
+  Eye,
+  EyeOff,
+  Pencil,
+  ChevronDown,
+} from "lucide-react";
 import { authApi } from "../services/api";
 import { userApi } from "../services/api";
 import Alert from "../components/ui/Alert";
@@ -88,6 +97,16 @@ export default function Settings() {
     };
   }, [apiResponse, handleAlertClose]);
 
+  const securityAlertProps = useMemo(() => {
+    if (!submitStatus.message) return null;
+
+    return {
+      message: submitStatus.message,
+      type: submitStatus.type,
+      timestamp: submitStatus.timestamp,
+    };
+  }, [submitStatus]);
+
   const validateName = (name) => {
     const nameRegex = /^[A-Za-z\s]+$/;
     if (!nameRegex.test(name)) {
@@ -114,6 +133,11 @@ export default function Settings() {
       const currentName = user?.name;
 
       if (!currentName) {
+        setApiResponse({
+          type: "error",
+          message: "Current user name not found",
+          timestamp: Date.now(),
+        });
         return;
       }
 
@@ -121,6 +145,11 @@ export default function Settings() {
 
       const nameError = validateName(cleanedName);
       if (nameError) {
+        setApiResponse({
+          type: "error",
+          message: nameError,
+          timestamp: Date.now(),
+        });
         return;
       }
 
@@ -150,6 +179,12 @@ export default function Settings() {
 
       localStorage.setItem("username", newUsername);
       setIsEditing({ name: false, bio: false });
+
+      // Update original values after successful save
+      setOriginalValues({
+        name: cleanedName,
+        bio: profileForm.bio,
+      });
     } catch (error) {
       setApiResponse({
         type: "error",
@@ -178,14 +213,6 @@ export default function Settings() {
     const newPassword = e.target.value;
     setPasswordForm((prev) => ({ ...prev, newPassword }));
     setPasswordErrors(validatePassword(newPassword));
-
-    if (passwordForm.confirmPassword) {
-      if (passwordForm.confirmPassword !== newPassword) {
-        setConfirmPasswordError("Passwords do not match");
-      } else {
-        setConfirmPasswordError("");
-      }
-    }
   };
 
   const handleConfirmPasswordChange = (e) => {
@@ -202,6 +229,12 @@ export default function Settings() {
       setConfirmPasswordError("");
     }
   };
+
+  const [passwordSuccessAlert, setPasswordSuccessAlert] = useState({
+    show: false,
+    message: "",
+    timestamp: null,
+  });
 
   const handlePasswordSubmit = async (e) => {
     e.preventDefault();
@@ -299,12 +332,13 @@ export default function Settings() {
     "w-full px-3 py-2 bg-white dark:bg-cyber-black border border-gray-300 dark:border-cyber-green rounded focus:ring-1 focus:ring-cyber-green text-gray-900 dark:text-white";
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8">
-      <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+    <div className="max-w-4xl mx-auto space-y-6 md:space-y-8 px-4 md:px-0">
+      <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white">
         Settings
       </h1>
 
-      <div className="flex space-x-4 border-b border-gray-200 dark:border-gray-800">
+      {/* Desktop Tabs */}
+      <div className="hidden md:flex space-x-4 border-b border-gray-200 dark:border-gray-800">
         {tabs.map((tab) => (
           <button
             key={tab.id}
@@ -321,261 +355,307 @@ export default function Settings() {
         ))}
       </div>
 
+      {/* Mobile Tabs */}
+      <div className="md:hidden space-y-4">
+        {tabs.map((tab) => (
+          <div key={tab.id}>
+            <button
+              onClick={() => setActiveTab(tab.id)}
+              className={`w-full flex items-center justify-between p-4 rounded-lg ${
+                activeTab === tab.id
+                  ? "bg-cyber-green/10 text-cyber-green"
+                  : "bg-gray-50 dark:bg-cyber-black text-gray-700 dark:text-gray-300"
+              }`}
+            >
+              <div className="flex items-center space-x-3">
+                <tab.icon className="h-5 w-5" />
+                <span className="font-medium">{tab.name}</span>
+              </div>
+              <ChevronDown
+                className={`h-5 w-5 transition-transform ${
+                  activeTab === tab.id ? "rotate-180" : ""
+                }`}
+              />
+            </button>
+          </div>
+        ))}
+      </div>
+
+      {/* Alert Component */}
       {apiResponse && (
         <Alert key={`alert-${apiResponse.timestamp}`} {...alertProps} />
       )}
 
-      {activeTab === "profile" && (
-        <form onSubmit={handleProfileSubmit} className="space-y-6">
-          <div className="relative">
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Full Name
-            </label>
-            <div className="relative">
-              {isEditing.name ? (
-                <input
-                  type="text"
-                  className="w-full px-3 py-2 bg-gray-50 dark:bg-cyber-black border border-gray-300 
-                    dark:border-cyber-green rounded focus:ring-1 focus:ring-cyber-green/50"
-                  value={profileForm.name}
-                  onChange={(e) => handleInputChange("name", e.target.value)}
-                />
-              ) : (
-                <div
-                  className="w-full px-3 py-2 bg-gray-50 dark:bg-cyber-black border border-gray-300 
-                  dark:border-cyber-green rounded"
+      {/* Content Section */}
+      <div className="space-y-6">
+        {/* Profile Section */}
+        {activeTab === "profile" && (
+          <form onSubmit={handleProfileSubmit} className="space-y-6">
+            {/* Name Input */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Full Name
+              </label>
+              <div className="relative">
+                {isEditing.name ? (
+                  <input
+                    type="text"
+                    className="w-full px-3 py-3 bg-gray-50 dark:bg-cyber-black border border-gray-300 
+                      dark:border-cyber-green rounded-lg focus:ring-1 focus:ring-cyber-green/50"
+                    value={profileForm.name}
+                    onChange={(e) => handleInputChange("name", e.target.value)}
+                  />
+                ) : (
+                  <div
+                    className="w-full px-3 py-3 bg-gray-50 dark:bg-cyber-black border border-gray-300 
+                    dark:border-cyber-green rounded-lg"
+                  >
+                    {profileForm.name}
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => handleEditToggle("name")}
+                  className="absolute right-3 top-1/2 -translate-y-1/2"
                 >
-                  {profileForm.name}
-                </div>
-              )}
-              <button
-                type="button"
-                onClick={() => handleEditToggle("name")}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 
-                  dark:text-gray-400 dark:hover:text-gray-200"
-              >
-                <Pencil className="h-4 w-4" />
-              </button>
-            </div>
-          </div>
-
-          <div className="relative">
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Email
-            </label>
-            <div className="relative">
-              <div
-                className="w-full px-3 py-2 bg-gray-50 dark:bg-cyber-black border border-gray-300 
-                dark:border-cyber-green rounded flex items-center justify-between"
-              >
-                <span className="text-gray-500">{profileForm.email}</span>
-                <Lock className="h-4 w-4 text-gray-400" />
+                  <Pencil className="h-5 w-5 text-gray-500 dark:text-gray-400" />
+                </button>
               </div>
             </div>
-          </div>
 
-          <div className="relative">
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Bio
-            </label>
-            <div className="relative">
-              {isEditing.bio ? (
-                <textarea
-                  id="bio"
-                  name="bio"
-                  value={profileForm.bio}
-                  onChange={handleBioChange}
-                  rows={4}
-                  maxLength={MAX_BIO_LENGTH}
-                  className="w-full resize-none px-3 py-2 bg-gray-50 dark:bg-cyber-black border 
-                    border-gray-300 dark:border-cyber-green rounded focus:ring-1 
-                    focus:ring-cyber-green/50 pr-10"
-                  placeholder="Tell us about yourself..."
-                />
-              ) : (
+            {/* Email Input - Read Only */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Email
+              </label>
+              <div className="relative">
                 <div
-                  className="w-full px-3 py-2 bg-gray-50 dark:bg-cyber-black border 
-                  border-gray-300 dark:border-cyber-green rounded min-h-[96px] pr-10"
+                  className="w-full px-3 py-3 bg-gray-50 dark:bg-cyber-black border border-gray-300 
+                  dark:border-cyber-green rounded-lg flex items-center justify-between"
                 >
-                  {profileForm.bio}
+                  <span className="text-gray-500">{profileForm.email}</span>
+                  <Lock className="h-4 w-4 text-gray-400" />
                 </div>
-              )}
-              <button
-                type="button"
-                onClick={() => handleEditToggle("bio")}
-                className="absolute right-3 top-3 text-gray-500 hover:text-gray-700 
-                  dark:text-gray-400 dark:hover:text-gray-200"
-              >
-                <Pencil className="h-4 w-4" />
-              </button>
-              {isEditing.bio && (
-                <span className="absolute bottom-2 right-2 text-xs text-gray-500 dark:text-gray-400">
-                  {profileForm.bio.length}/{MAX_BIO_LENGTH}
-                </span>
-              )}
+              </div>
             </div>
-          </div>
 
-          {hasChanges && (
-            <div className="flex justify-end space-x-3">
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => {
-                  setProfileForm({
-                    ...originalValues,
-                    email: user?.email || "",
-                  });
-                  setIsEditing({ name: false, bio: false });
-                }}
-              >
-                Cancel
-              </Button>
-              <Button type="submit">Save Changes</Button>
+            {/* Bio Input */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Bio
+              </label>
+              <div className="relative">
+                {isEditing.bio ? (
+                  <textarea
+                    value={profileForm.bio}
+                    onChange={handleBioChange}
+                    rows={4}
+                    maxLength={MAX_BIO_LENGTH}
+                    className="w-full resize-none px-3 py-3 bg-gray-50 dark:bg-cyber-black border 
+                      border-gray-300 dark:border-cyber-green rounded-lg focus:ring-1 
+                      focus:ring-cyber-green/50 pr-10"
+                    placeholder="Tell us about yourself..."
+                  />
+                ) : (
+                  <div
+                    className="w-full px-3 py-3 bg-gray-50 dark:bg-cyber-black border 
+                    border-gray-300 dark:border-cyber-green rounded-lg min-h-[96px] pr-10 whitespace-pre-wrap"
+                  >
+                    {profileForm.bio || "No bio added yet"}
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => handleEditToggle("bio")}
+                  className="absolute right-3 top-3"
+                >
+                  <Pencil className="h-5 w-5 text-gray-500 dark:text-gray-400" />
+                </button>
+                {isEditing.bio && (
+                  <span className="absolute bottom-2 right-2 text-xs text-gray-500">
+                    {profileForm.bio.length}/{MAX_BIO_LENGTH}
+                  </span>
+                )}
+              </div>
             </div>
-          )}
-        </form>
-      )}
 
-      {activeTab === "security" && (
-        <form onSubmit={handlePasswordSubmit} className="space-y-6">
-          {submitStatus.message && (
-            <Alert
-              type={submitStatus.type}
-              message={submitStatus.message}
-              onClose={() =>
-                setSubmitStatus({ type: "", message: "", timestamp: null })
-              }
-              duration={4000}
-            />
-          )}
+            {/* Action Buttons - Only show when editing and has changes */}
+            {(isEditing.name || isEditing.bio) && hasChanges && (
+              <div className="flex justify-end space-x-3">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => {
+                    setProfileForm({
+                      ...originalValues,
+                      email: user?.email || "",
+                    });
+                    setIsEditing({ name: false, bio: false });
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit">Save Changes</Button>
+              </div>
+            )}
+          </form>
+        )}
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Current Password
-            </label>
-            <div className="relative">
-              <input
-                type={showPasswords.current ? "text" : "password"}
-                className={inputClassName}
-                value={passwordForm.currentPassword}
-                onChange={(e) =>
-                  setPasswordForm((prev) => ({
-                    ...prev,
-                    currentPassword: e.target.value,
-                  }))
+        {/* Security Section */}
+        {activeTab === "security" && (
+          <form onSubmit={handlePasswordSubmit} className="space-y-6">
+            {submitStatus.message && (
+              <Alert
+                key={`security-alert-${submitStatus.timestamp}`}
+                {...securityAlertProps}
+              />
+            )}
+
+            {/* Show success alert separately */}
+            {passwordSuccessAlert.show && (
+              <Alert
+                type="success"
+                message={passwordSuccessAlert.message}
+                onClose={() =>
+                  setPasswordSuccessAlert({
+                    show: false,
+                    message: "",
+                    timestamp: null,
+                  })
                 }
-                required
+                duration={4000}
               />
-              <button
-                type="button"
-                onClick={() => togglePasswordVisibility("current")}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 
-                  dark:text-gray-400 dark:hover:text-gray-200"
-              >
-                {showPasswords.current ? (
-                  <EyeOff className="h-5 w-5" />
-                ) : (
-                  <Eye className="h-5 w-5" />
-                )}
-              </button>
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              New Password
-            </label>
-            <div className="relative">
-              <input
-                type={showPasswords.new ? "text" : "password"}
-                className={`${inputClassName} ${
-                  passwordErrors.length > 0 ? "border-red-500" : ""
-                }`}
-                value={passwordForm.newPassword}
-                onChange={handlePasswordChange}
-                required
-              />
-              <button
-                type="button"
-                onClick={() => togglePasswordVisibility("new")}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 
-                  dark:text-gray-400 dark:hover:text-gray-200"
-              >
-                {showPasswords.new ? (
-                  <EyeOff className="h-5 w-5" />
-                ) : (
-                  <Eye className="h-5 w-5" />
-                )}
-              </button>
-            </div>
-            {passwordErrors.length > 0 && (
-              <ul className="mt-2 text-sm text-red-500 space-y-1">
-                {passwordErrors.map((error, index) => (
-                  <li key={index}>{error}</li>
-                ))}
-              </ul>
             )}
-          </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Confirm New Password
-            </label>
-            <div className="relative">
-              <input
-                type={showPasswords.confirm ? "text" : "password"}
-                className={`${inputClassName} ${
-                  confirmPasswordError ? "border-red-500" : ""
-                }`}
-                value={passwordForm.confirmPassword}
-                onChange={handleConfirmPasswordChange}
-                required
-              />
-              <button
-                type="button"
-                onClick={() => togglePasswordVisibility("confirm")}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 
-                  dark:text-gray-400 dark:hover:text-gray-200"
-              >
-                {showPasswords.confirm ? (
-                  <EyeOff className="h-5 w-5" />
-                ) : (
-                  <Eye className="h-5 w-5" />
-                )}
-              </button>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Current Password
+              </label>
+              <div className="relative">
+                <input
+                  type={showPasswords.current ? "text" : "password"}
+                  className={inputClassName}
+                  value={passwordForm.currentPassword}
+                  onChange={(e) =>
+                    setPasswordForm((prev) => ({
+                      ...prev,
+                      currentPassword: e.target.value,
+                    }))
+                  }
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => togglePasswordVisibility("current")}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 
+                    dark:text-gray-400 dark:hover:text-gray-200"
+                >
+                  {showPasswords.current ? (
+                    <EyeOff className="h-5 w-5" />
+                  ) : (
+                    <Eye className="h-5 w-5" />
+                  )}
+                </button>
+              </div>
             </div>
-            {confirmPasswordError && (
-              <p className="mt-2 text-sm text-red-500">
-                {confirmPasswordError}
-              </p>
-            )}
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                New Password
+              </label>
+              <div className="relative">
+                <input
+                  type={showPasswords.new ? "text" : "password"}
+                  className={`${inputClassName} ${
+                    passwordErrors.length > 0 ? "border-red-500" : ""
+                  }`}
+                  value={passwordForm.newPassword}
+                  onChange={handlePasswordChange}
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => togglePasswordVisibility("new")}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 
+                    dark:text-gray-400 dark:hover:text-gray-200"
+                >
+                  {showPasswords.new ? (
+                    <EyeOff className="h-5 w-5" />
+                  ) : (
+                    <Eye className="h-5 w-5" />
+                  )}
+                </button>
+              </div>
+              {passwordErrors.length > 0 && (
+                <ul className="mt-2 text-sm text-red-500 space-y-1">
+                  {passwordErrors.map((error, index) => (
+                    <li key={index}>{error}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Confirm New Password
+              </label>
+              <div className="relative">
+                <input
+                  type={showPasswords.confirm ? "text" : "password"}
+                  className={`${inputClassName} ${
+                    confirmPasswordError ? "border-red-500" : ""
+                  }`}
+                  value={passwordForm.confirmPassword}
+                  onChange={handleConfirmPasswordChange}
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => togglePasswordVisibility("confirm")}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 
+                    dark:text-gray-400 dark:hover:text-gray-200"
+                >
+                  {showPasswords.confirm ? (
+                    <EyeOff className="h-5 w-5" />
+                  ) : (
+                    <Eye className="h-5 w-5" />
+                  )}
+                </button>
+              </div>
+              {confirmPasswordError && (
+                <p className="mt-2 text-sm text-red-500">
+                  {confirmPasswordError}
+                </p>
+              )}
+            </div>
+
+            <Button
+              type="submit"
+              disabled={!!confirmPasswordError || passwordErrors.length > 0}
+            >
+              Update Password
+            </Button>
+          </form>
+        )}
+
+        {/* Notifications Section */}
+        {activeTab === "notifications" && (
+          <div className="bg-gray-50 dark:bg-cyber-black p-4 rounded-lg">
+            <p className="text-gray-600 dark:text-gray-400">
+              Notification settings will be available soon.
+            </p>
           </div>
+        )}
 
-          <Button
-            type="submit"
-            disabled={!!confirmPasswordError || passwordErrors.length > 0}
-          >
-            Update Password
-          </Button>
-        </form>
-      )}
-
-      {activeTab === "notifications" && (
-        <div className="space-y-6">
-          <p className="text-gray-600 dark:text-gray-400">
-            Notification settings will be available soon.
-          </p>
-        </div>
-      )}
-
-      {activeTab === "privacy" && (
-        <div className="space-y-6">
-          <p className="text-gray-600 dark:text-gray-400">
-            Privacy settings will be available soon.
-          </p>
-        </div>
-      )}
+        {/* Privacy Section */}
+        {activeTab === "privacy" && (
+          <div className="bg-gray-50 dark:bg-cyber-black p-4 rounded-lg">
+            <p className="text-gray-600 dark:text-gray-400">
+              Privacy settings will be available soon.
+            </p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

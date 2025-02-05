@@ -1,10 +1,19 @@
 import { useState } from "react";
-import { Book, Clock, Star, ChevronRight, Search } from "lucide-react";
+import {
+  Book,
+  Clock,
+  Star,
+  ChevronRight,
+  Search,
+  Filter,
+  X,
+} from "lucide-react";
 
 export default function Courses() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [isLoading, setIsLoading] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
 
   const categories = [
     { id: "all", name: "All Courses" },
@@ -50,18 +59,29 @@ export default function Courses() {
   });
 
   return (
-    <div className="space-y-8">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4">
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-          Courses
-        </h1>
-        <div className="relative">
+    <div className="space-y-6 relative">
+      {/* Header - Enhanced for mobile */}
+      <div className="flex flex-col gap-4">
+        <div className="flex justify-between items-center">
+          <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white">
+            Courses
+          </h1>
+          <button
+            onClick={() => setShowFilters(!showFilters)}
+            className="md:hidden p-2 rounded-lg border border-gray-300 dark:border-cyber-green 
+              hover:bg-cyber-green/10 transition-colors"
+          >
+            <Filter className="h-5 w-5 text-gray-600 dark:text-cyber-green" />
+          </button>
+        </div>
+
+        {/* Search - Full width on mobile */}
+        <div className="relative w-full">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
           <input
             type="text"
             placeholder="Search courses..."
-            className="w-full md:w-auto pl-10 pr-4 py-2 bg-white dark:bg-cyber-black border border-gray-300 
+            className="w-full pl-10 pr-4 py-3 bg-white dark:bg-cyber-black border border-gray-300 
               dark:border-cyber-green rounded-lg focus:outline-none focus:ring-1 focus:ring-cyber-green 
               text-gray-900 dark:text-white transition-colors"
             value={searchQuery}
@@ -70,43 +90,74 @@ export default function Courses() {
         </div>
       </div>
 
-      {/* Categories */}
+      {/* Categories - Mobile Dropdown */}
       <div
-        className="flex space-x-4 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-gray-300 
-        dark:scrollbar-thumb-cyber-green scrollbar-track-transparent"
+        className={`md:block ${showFilters ? "block" : "hidden"} 
+        fixed md:relative top-0 md:top-auto left-0 md:left-auto w-full md:w-auto h-full md:h-auto 
+        bg-white/95 dark:bg-cyber-black/95 md:bg-transparent z-50 md:z-auto
+        transform transition-transform duration-300 ease-out ${
+          showFilters ? "translate-y-0" : "-translate-y-full md:translate-y-0"
+        }`}
       >
-        {categories.map((category) => (
-          <button
-            key={category.id}
-            onClick={() => setSelectedCategory(category.id)}
-            className={`px-4 py-2 rounded-lg transition-colors whitespace-nowrap ${
-              selectedCategory === category.id
-                ? "bg-cyber-green text-white"
-                : "border border-gray-300 dark:border-cyber-green text-gray-700 dark:text-cyber-green hover:bg-cyber-green hover:text-white"
-            }`}
+        <div className="p-4 md:p-0">
+          <div className="flex md:hidden justify-between items-center mb-4">
+            <h3 className="text-lg font-bold text-gray-900 dark:text-white">
+              Filters
+            </h3>
+            <button
+              onClick={() => setShowFilters(false)}
+              className="p-2 hover:bg-gray-100 dark:hover:bg-cyber-green/10 rounded-lg"
+            >
+              <X className="h-5 w-5 text-gray-600 dark:text-cyber-green" />
+            </button>
+          </div>
+
+          <div
+            className="flex flex-col md:flex-row gap-2 md:gap-4 md:overflow-x-auto md:pb-2 
+            md:scrollbar-thin md:scrollbar-thumb-gray-300 md:dark:scrollbar-thumb-cyber-green 
+            md:scrollbar-track-transparent"
           >
-            {category.name}
-          </button>
-        ))}
+            {categories.map((category) => (
+              <button
+                key={category.id}
+                onClick={() => {
+                  setSelectedCategory(category.id);
+                  setShowFilters(false);
+                }}
+                className={`px-4 py-3 md:py-2 rounded-lg transition-colors text-left md:text-center 
+                  ${
+                    selectedCategory === category.id
+                      ? "bg-cyber-green text-white"
+                      : "border border-gray-300 dark:border-cyber-green text-gray-700 dark:text-cyber-green hover:bg-cyber-green hover:text-white"
+                  }`}
+              >
+                {category.name}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
-      {/* Course Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      {/* Course Grid - Responsive layout */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
         {filteredCourses.map((course) => (
           <div
             key={course.id}
-            className="bg-white dark:bg-cyber-black border border-gray-200 dark:border-cyber-green 
+            className="group bg-white dark:bg-cyber-black border border-gray-200 dark:border-cyber-green 
               rounded-lg overflow-hidden hover:shadow-lg dark:hover:border-opacity-80 transition-all"
           >
-            <div className="p-6 space-y-4">
-              <h3 className="text-xl font-bold text-gray-900 dark:text-white">
+            <div className="p-4 md:p-6 space-y-3 md:space-y-4">
+              <h3
+                className="text-lg md:text-xl font-bold text-gray-900 dark:text-white 
+                group-hover:text-cyber-green dark:group-hover:text-cyber-green transition-colors"
+              >
                 {course.title}
               </h3>
-              <p className="text-gray-600 dark:text-gray-400 text-sm">
+              <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-2">
                 {course.description}
               </p>
 
-              <div className="flex items-center space-x-4 text-sm text-gray-500 dark:text-gray-400">
+              <div className="flex flex-wrap items-center gap-3 text-sm text-gray-500 dark:text-gray-400">
                 <div className="flex items-center">
                   <Clock className="h-4 w-4 mr-1" />
                   {course.duration}
@@ -120,16 +171,19 @@ export default function Courses() {
                 </div>
               </div>
 
-              <div className="flex items-center justify-between pt-4 border-t border-gray-100 dark:border-gray-800">
-                <span className="text-sm text-gray-500 dark:text-gray-400">
+              <div
+                className="flex items-center justify-between pt-3 md:pt-4 
+                border-t border-gray-100 dark:border-gray-800"
+              >
+                <span className="text-xs md:text-sm text-gray-500 dark:text-gray-400">
                   {course.enrolled.toLocaleString()} enrolled
                 </span>
                 <button
                   className="flex items-center text-cyber-green hover:text-cyber-green/80 
-                  transition-colors group"
+                    transition-colors group/btn text-sm md:text-base"
                 >
                   Start Course
-                  <ChevronRight className="h-4 w-4 ml-1 transform group-hover:translate-x-1 transition-transform" />
+                  <ChevronRight className="h-4 w-4 ml-1 transform group-hover/btn:translate-x-1 transition-transform" />
                 </button>
               </div>
             </div>
